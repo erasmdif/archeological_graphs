@@ -1,0 +1,267 @@
+<!doctype html>
+<html lang="it">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>US Object Analytics Dashboard</title>
+  <link rel="preconnect" href="https://cdn.jsdelivr.net" />
+  <link rel="preconnect" href="https://unpkg.com" />
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css" />
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <link rel="stylesheet" href="assets/css/styles.css" />
+</head>
+<body>
+  <main class="app-shell">
+    <section class="panel upload-panel">
+      <div class="section-heading">
+        <div>
+          <h1>Caricamento dati</h1>
+          <p>Carica un output SQL già aggregato oppure ricostruisci il dataset dalle tabelle raw. L'app gira interamente nel browser ed è adatta a GitHub Pages.</p>
+        </div>
+        <div class="top-actions">
+          <a class="btn ghost" href="catalog.html"><i class="bi bi-grid-3x3-gap"></i> Apri catalogo</a>
+          <div class="status-pill" id="dataStatus">Nessun dataset caricato</div>
+        </div>
+      </div>
+
+      <div class="upload-layout">
+        <article class="upload-card featured-upload">
+          <div class="upload-card-head">
+            <div>
+              <h2>Output SQL già aggregato</h2>
+              <p>Formato consigliato: <strong>GeoJSON FeatureCollection</strong> con colonne <code>n_*</code>. Sono supportati anche JSON e CSV.</p>
+            </div>
+            <label>
+              Tipo dataset
+              <select id="precomputedType">
+                <option value="material">Material class</option>
+                <option value="morphology">Morphological class</option>
+                <option value="category">Category object</option>
+                <option value="combo">Morphology × Material</option>
+              </select>
+            </label>
+          </div>
+
+          <button type="button" class="dropzone" id="precomputedDropzone">
+            <span class="dropzone-icon"><i class="bi bi-cloud-arrow-up"></i></span>
+            <span class="dropzone-title">Trascina qui il file</span>
+            <span class="dropzone-subtitle">oppure clicca per selezionare un file GeoJSON / JSON / CSV</span>
+            <span class="dropzone-file" id="precomputedFileName">Nessun file selezionato</span>
+          </button>
+          <input type="file" id="precomputedFile" accept=".geojson,.json,.csv" hidden />
+
+          <div class="button-row">
+            <button id="loadPrecomputedBtn" class="btn primary"><i class="bi bi-box-arrow-in-down"></i> Carica output</button>
+            <button id="loadSampleBtn" class="btn ghost"><i class="bi bi-stars"></i> Carica dati demo allegati</button>
+          </div>
+        </article>
+
+        <article class="upload-card raw-upload">
+          <div class="upload-card-head compact-head">
+            <div>
+              <h2>Tabelle raw</h2>
+              <p>Ricostruzione lato browser a partire da <code>su</code>, <code>object_minv</code>, <code>voc</code>, <code>evidence</code> e <code>sites</code>.</p>
+            </div>
+          </div>
+
+          <div class="raw-grid">
+            <label class="mini-upload">su CSV/JSON<input type="file" id="rawSu" accept=".csv,.json,.geojson" /></label>
+            <label class="mini-upload">object_minv CSV/JSON<input type="file" id="rawObjects" accept=".csv,.json,.geojson" /></label>
+            <label class="mini-upload">voc CSV/JSON<input type="file" id="rawVoc" accept=".csv,.json,.geojson" /></label>
+            <label class="mini-upload">evidence GeoJSON/JSON<input type="file" id="rawEvidence" accept=".geojson,.json,.csv" /></label>
+            <label class="mini-upload">sites GeoJSON/JSON<input type="file" id="rawSites" accept=".geojson,.json,.csv" /></label>
+          </div>
+
+          <div class="button-row">
+            <button id="buildRawBtn" class="btn secondary"><i class="bi bi-gear-wide-connected"></i> Ricostruisci da raw</button>
+            <button id="downloadDataBtn" class="btn ghost"><i class="bi bi-download"></i> Scarica dataset attivo</button>
+          </div>
+        </article>
+      </div>
+
+      <div id="fieldMappingPanel" class="field-mapping-panel hidden">
+        <div class="section-heading compact">
+          <div>
+            <h2>Mappatura dei campi</h2>
+            <p>Il file è leggibile, ma alcuni campi descrittivi non hanno i nomi attesi. Associa i tuoi campi alle informazioni usate da grafici, catalogo e mappa. Puoi lasciare “Non presente” dove il dato manca.</p>
+          </div>
+          <button id="applyFieldMappingBtn" class="btn primary"><i class="bi bi-check2-circle"></i> Applica mappatura</button>
+        </div>
+        <div id="fieldMappingGrid" class="field-mapping-grid"></div>
+      </div>
+    </section>
+
+    <section class="panel controls-panel chart-controls-panel">
+      <div class="section-heading compact">
+        <div>
+          <h2>Filtri e raggruppamenti</h2>
+          <p>I dati ND rimangono validi per i grafici. In mappa, i record non georiferibili vengono esclusi e riportati nel log rosso.</p>
+        </div>
+      </div>
+
+      <div class="control-grid chart-control-grid">
+        <label>
+          Dataset
+          <select id="datasetSelect">
+            <option value="material">Material class</option>
+            <option value="morphology">Morphological class</option>
+            <option value="category">Category object</option>
+            <option value="combo">Morphology × Material</option>
+          </select>
+        </label>
+        <label>
+          Raggruppa grafico per
+          <select id="groupBySelect">
+            <option value="su">US</option>
+            <option value="evidence">Evidence</option>
+            <option value="construction_type">Construction type</option>
+            <option value="site">Site</option>
+            <option value="municipality">Municipality</option>
+            <option value="locality">Locality</option>
+            <option value="site_group">Site group</option>
+          </select>
+        </label>
+        <label>
+          Top gruppi visualizzati
+          <input id="topGroups" type="number" min="5" max="100" value="18" />
+        </label>
+        <label>
+          Valori nel grafico
+          <select id="valueMode">
+            <option value="count">Conteggi assoluti</option>
+            <option value="share">Percentuali per gruppo</option>
+          </select>
+        </label>
+      </div>
+    </section>
+
+    <section class="panel chart-panel">
+      <div class="chart-panel-head">
+        <div>
+          <h2>Grafici</h2>
+          <p>Un’unica area grafica con cambio rapido della visualizzazione.</p>
+        </div>
+        <div class="chart-switcher" id="chartModeSwitcher">
+          <button class="chart-mode-btn active" data-chart-mode="donut" title="Donut"><i class="bi bi-pie-chart"></i></button>
+          <button class="chart-mode-btn" data-chart-mode="bar" title="Barre"><i class="bi bi-bar-chart"></i></button>
+          <button class="chart-mode-btn" data-chart-mode="scatter" title="Dispersione"><i class="bi bi-bounding-box-circles"></i></button>
+          <button class="chart-mode-btn" data-chart-mode="trend" title="Tendenza"><i class="bi bi-graph-up-arrow"></i></button>
+        </div>
+      </div>
+
+      <div class="chart-layout">
+        <aside class="chart-side explain-side">
+          <div class="mini-panel">
+            <span class="mini-label">Descrizione</span>
+            <h3 id="chartTitle">Distribuzione complessiva</h3>
+            <p id="chartDescription">Carica un dataset per visualizzare la distribuzione complessiva delle categorie selezionate.</p>
+          </div>
+          <div class="mini-panel soft-info">
+            <span class="mini-label">Come leggerlo</span>
+            <p id="chartHowTo">Usa i pulsanti in alto per cambiare visualizzazione. I valori esclusi dalla legenda non vengono conteggiati nel grafico né nella mappa.</p>
+          </div>
+        </aside>
+
+        <div class="chart-canvas-wrap">
+          <canvas id="mainChart"></canvas>
+        </div>
+
+        <aside class="chart-side legend-side">
+          <div class="legend-head">
+            <div>
+              <span class="mini-label">Legenda / filtri</span>
+              <h3>Valori del dataset</h3>
+            </div>
+            <div class="filter-actions">
+              <button id="selectAllCategories" class="btn tiny ghost"><i class="bi bi-check2-all"></i></button>
+              <button id="excludeZeroCategories" class="btn tiny ghost"><i class="bi bi-filter-circle"></i></button>
+            </div>
+          </div>
+          <label class="search-wrap">
+            <i class="bi bi-search"></i>
+            <input id="categorySearch" type="search" placeholder="Cerca valore…" />
+          </label>
+          <div id="categoryLegend" class="legend-list"></div>
+        </aside>
+      </div>
+    </section>
+
+    <section class="panel map-controls-panel">
+      <div class="section-heading compact">
+        <div>
+          <h2>Filtri e utility mappa</h2>
+          <p>Controlla livello di aggregazione, classi da visualizzare in heatmap, disambiguazione delle geometrie sovrapposte e basi cartografiche.</p>
+        </div>
+      </div>
+      <div class="control-grid map-control-grid">
+        <label>
+          Livello
+          <select id="mapGroupSelect">
+            <option value="su">US</option>
+            <option value="evidence">Evidence</option>
+            <option value="site">Site</option>
+          </select>
+        </label>
+        <label>
+          Classi / metrica
+          <select id="mapMetricSelect" multiple size="4">
+            <option value="total" selected>Totale oggetti</option>
+          </select>
+        </label>
+        <label>
+          Visualizzazione
+          <select id="mapDisplaySelect">
+            <option value="auto">Auto</option>
+            <option value="polygons">Poligoni</option>
+            <option value="bubbles">Bolle / distribuzione</option>
+          </select>
+        </label>
+        <label>
+          Disambiguazione hover/click
+          <input id="mapPickDepth" type="range" min="0" max="8" value="0" />
+        </label>
+        <label class="wide-control">
+          Base XYZ custom CTR / Google / altro
+          <input id="customTileUrl" type="text" placeholder="https://.../{z}/{x}/{y}.png" />
+        </label>
+        <div class="map-control-actions">
+          <button id="addCustomTileBtn" class="btn tiny secondary"><i class="bi bi-plus-circle"></i> Aggiungi base</button>
+        </div>
+      </div>
+    </section>
+
+    <section class="panel map-panel">
+      <div class="section-heading">
+        <div>
+          <h2>Mappa</h2>
+          <p>La visualizzazione può mostrare poligoni o distribuzioni a bolle. Per raggruppamenti per sito/evidence, i dati possono essere visti come distribuzione aggregata oppure come footprint poligonale delle US appartenenti al gruppo.</p>
+        </div>
+
+      </div>
+      <div class="map-workspace">
+        <div id="map"></div>
+        <aside id="mapInfoPanel" class="map-info-panel">
+          <div class="map-info-empty">
+            <i class="bi bi-cursor"></i>
+            <h3>Seleziona una geometria</h3>
+            <p>Clicca sulla mappa per leggere composizione, classi assenti e dettaglio per US.</p>
+          </div>
+        </aside>
+      </div>
+      <div id="mapLegend" class="map-legend"></div>
+      <div id="mapLog" class="map-log collapsed">
+        <div class="map-log-head">
+          <strong>Log esclusioni mappa</strong>
+          <span id="mapLogCounter">0 record esclusi</span>
+        </div>
+        <div id="mapLogBody" class="map-log-body"></div>
+      </div>
+    </section>
+  </main>
+
+  <script src="https://cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script src="assets/js/app.js"></script>
+</body>
+</html>
