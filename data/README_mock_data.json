@@ -1,0 +1,21 @@
+{
+  "description": "Synthetic mock-up data for US Object Analytics Dashboard. Invented Perugia-area dataset, not real archaeological data.",
+  "area": "Invented sites around Perugia, Umbria, WGS84 lon/lat.",
+  "rows_per_file": {
+    "m_class.geojson": 600,
+    "morpho.geojson": 600,
+    "category_obj.geojson": 600,
+    "material_morph_combo.geojson": 600
+  },
+  "site_codes": [
+    "PG-GRF.01",
+    "PG-LUN.02",
+    "PG-MDR.03",
+    "PG-RAM.04",
+    "PG-CVL.05",
+    "PG-NEM.06",
+    "PG-ARG.07",
+    "PG-VET.08"
+  ],
+  "note": "Replace the existing data/ folder with this folder."
+}
