@@ -55,6 +55,8 @@
             <option value="evidence">Evidence</option>
             <option value="site">Sito</option>
             <option value="construction_type">Construction type</option>
+            <option value="evidence_type">Evidence type</option>
+            <option value="chrono">Chronology</option>
           </select>
         </label>
         <label>
@@ -68,6 +70,8 @@
             <option value="su">per US</option>
             <option value="evidence">per evidence</option>
             <option value="site">per sito</option>
+            <option value="evidence_type">per evidence type</option>
+            <option value="chrono">per cronologia</option>
           </select>
         </label>
         <label>
@@ -77,6 +81,14 @@
         <label>
           Top unità interne
           <input id="catalogTopChildren" type="number" min="3" max="80" value="24" />
+        </label>
+        <label>
+          Filtro cronologico
+          <select id="catalogChronoFilter" multiple size="7"></select>
+        </label>
+        <label class="toggle-control">
+          <span>Escludi range dubbi</span>
+          <input id="catalogChronoStrict" type="checkbox" />
         </label>
       </div>
     </section>

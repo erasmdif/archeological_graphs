@@ -33,6 +33,8 @@ const EXPECTED_COLUMNS = {
 const ND = {
   evidence: 'evidence ND',
   site: 'site ND',
+  evidence_type: 'evidence_type ND',
+  chrono: 'chronology ND',
   construction_type: 'construction_type ND',
   municipality: 'municipality ND',
   locality: 'locality ND',
@@ -46,19 +48,23 @@ const FIELD_MAPPING_DEFS = [
   { target: 'su_dscu', label: 'Nome / descrizione US', candidates: ['su_dscu', 'us_name', 'name_us', 'nome_us', 'description_us', 'us_label'] },
   { target: 'id_evd', label: 'Identificativo evidence', candidates: ['id_evd', 'evidence_id', 'id_evidence', 'evd_id'] },
   { target: 'evidence_id_old_str', label: 'Nome / codice evidence', candidates: ['evidence_id_old_str', 'id_old_str', 'evidence_name', 'evd_name', 'evidence_code'] },
+  { target: 'evidence_type_id', label: 'ID evidence type', candidates: ['evidence_type_id', 'id_evidence_type', 'id_evid_type'] },
+  { target: 'evidence_type', label: 'Evidence type', candidates: ['evidence_type', 'evid_type', 'type_evidence', 'evidence_typology'] },
   { target: 'construction_type_id', label: 'ID construction type', candidates: ['construction_type_id', 'id_construction_type'] },
   { target: 'construction_type', label: 'Construction type', candidates: ['construction_type', 'construction', 'type_construction', 'ctype'] },
+  { target: 'id_site_fdm', label: 'ID sito FDM', candidates: ['id_site_fdm', 'site_fdm', 'fdm_site_id', 'id_site'] },
   { target: 'site_code', label: 'Codice sito', candidates: ['site_code', 'site', 'cod_site', 'site_id', 'codice_sito'] },
   { target: 'municipality', label: 'Municipality', candidates: ['municipality', 'comune', 'municipio'] },
   { target: 'locality', label: 'Locality', candidates: ['locality', 'localita', 'località', 'place'] },
   { target: 'address', label: 'Address', candidates: ['address', 'indirizzo'] },
   { target: 'site_group', label: 'Campo gruppo sito', candidates: ['site_group', 'site_label', 'site_full_name'] },
+  { target: 'chrono_gen', label: 'Chronology / chrono_gen', candidates: ['chrono_gen', 'chronology', 'chrono', 'period', 'periodo'] },
 ];
 
 const META_FIELD_NAMES = new Set([
   'fid', 'id', 'id_su', 'su_fid', 'su_dscu', 'id_evd', 'evidence_id_old_str', 'id_old_str',
-  'construction_type_id', 'construction_type', 'site_code', 'municipality', 'locality',
-  'address', 'site_group', 'geometry', 'geom', 'evidence_geom', 'site_geom'
+  'construction_type_id', 'construction_type', 'evidence_type_id', 'evidence_type', 'id_site_fdm', 'site_code', 'municipality', 'locality',
+  'address', 'site_group', 'chrono_gen', 'geometry', 'geom', 'evidence_geom', 'site_geom'
 ]);
 
 const els = {};
@@ -76,7 +82,7 @@ function cacheEls() {
   [
     'dataStatus', 'precomputedType', 'precomputedFile', 'precomputedDropzone', 'precomputedFileName', 'loadPrecomputedBtn', 'loadSampleBtn', 'fieldMappingPanel', 'fieldMappingGrid', 'applyFieldMappingBtn',
     'rawSu', 'rawObjects', 'rawVoc', 'rawEvidence', 'rawSites', 'buildRawBtn', 'downloadDataBtn',
-    'datasetSelect', 'groupBySelect', 'topGroups', 'valueMode', 'mapGroupSelect', 'mapMetricSelect', 'mapDisplaySelect', 'mapPickDepth', 'mapInfoPanel',
+    'datasetSelect', 'groupBySelect', 'topGroups', 'valueMode', 'chronoFilterSelect', 'chronoStrictToggle', 'mapGroupSelect', 'mapMetricSelect', 'mapDisplaySelect', 'mapPickDepth', 'mapInfoPanel',
     'categorySearch', 'selectAllCategories', 'excludeZeroCategories', 'categoryLegend',
     'chartTitle', 'chartDescription', 'chartHowTo', 'chartModeSwitcher',
     'customTileUrl', 'addCustomTileBtn', 'mapLog', 'mapLogCounter', 'mapLogBody', 'mapLegend'
@@ -92,11 +98,12 @@ function bindEvents() {
 
   bindDropzone();
 
-  ['datasetSelect', 'groupBySelect', 'topGroups', 'valueMode', 'mapGroupSelect', 'mapMetricSelect', 'mapDisplaySelect', 'mapPickDepth'].forEach(id => {
+  ['datasetSelect', 'groupBySelect', 'topGroups', 'valueMode', 'chronoFilterSelect', 'chronoStrictToggle', 'mapGroupSelect', 'mapMetricSelect', 'mapDisplaySelect', 'mapPickDepth'].forEach(id => {
     els[id].addEventListener('change', () => {
       if (id === 'datasetSelect') {
         state.activeType = els.datasetSelect.value;
         state.excludedCategories.clear();
+        populateChronologyControls();
         populateCategoryControls();
         populateMapMetricOptions();
       }
@@ -118,7 +125,7 @@ function bindEvents() {
   els.excludeZeroCategories.addEventListener('click', () => {
     const ds = getActiveDataset();
     if (!ds) return;
-    const totals = categoryTotals(ds.records, ds.categories);
+    const totals = categoryTotals(filteredRecords(ds), ds.categories);
     ds.categories.forEach(cat => {
       if ((totals[cat] || 0) === 0) state.excludedCategories.add(cat);
     });
@@ -339,6 +346,7 @@ function afterDatasetLoaded() {
   ensureActiveDatasetAvailable();
   updateDatasetSelectAvailability();
   state.excludedCategories.clear();
+  populateChronologyControls();
   populateCategoryControls();
   populateMapMetricOptions();
   updateDataStatus();
@@ -396,7 +404,7 @@ function populateCategoryControls() {
     if (!state.categorySearch) return true;
     return `${ds.labels[cat]} ${cat}`.toLowerCase().includes(state.categorySearch);
   });
-  const totals = categoryTotals(ds.records, ds.categories);
+  const totals = categoryTotals(filteredRecords(ds), ds.categories);
   const colors = categoryColors(ds, ds.categories);
 
   categories.forEach(cat => {
@@ -425,7 +433,7 @@ function updateMainChart(ds) {
   const groupBy = els.groupBySelect.value;
   const topN = clamp(parseInt(els.topGroups.value, 10) || 18, 5, 100);
   const valueMode = els.valueMode.value;
-  const groups = aggregateRecords(ds.records, groupBy, categories);
+  const groups = aggregateRecords(filteredRecords(ds), groupBy, categories);
   const topGroups = groups.slice().sort((a, b) => b.total - a.total).slice(0, topN);
 
   if (!categories.length) {
@@ -477,7 +485,8 @@ function updateChartText(ds, groups, topGroups, categories, groupBy, valueMode) 
 }
 
 function renderDonut(ds, categories) {
-  const totals = Object.entries(categoryTotals(ds.records, categories)).filter(([, v]) => v > 0).sort((a, b) => b[1] - a[1]);
+  const records = filteredRecords(ds);
+  const totals = Object.entries(categoryTotals(records, categories)).filter(([, v]) => v > 0).sort((a, b) => b[1] - a[1]);
   const folded = foldRows(totals, 14);
   const colorsMap = categoryColors(ds, categories);
   const labels = folded.map(([cat]) => cat === '__other' ? 'Other' : ds.labels[cat]);
@@ -546,7 +555,7 @@ function renderScatter(ds, groups, categories, groupBy) {
   let xTitle = ds.label;
   let yTitle = 'Diversità valori';
   if (other) {
-    const otherGroups = new Map(aggregateRecords(other.records, groupBy, activeCategories(other)).map(g => [g.key, g]));
+    const otherGroups = new Map(aggregateRecords(filteredRecords(other), groupBy, activeCategories(other)).map(g => [g.key, g]));
     yTitle = other.label;
     data = groups.map(g => ({ x: g.total, y: otherGroups.get(g.key)?.total || 0, r: Math.max(5, Math.min(18, 4 + Math.sqrt(g.records.length))), _label: g.label }));
   } else {
@@ -645,7 +654,8 @@ function activeCategories(ds = getActiveDataset()) {
 function aggregateRecords(records, groupBy, categories) {
   const map = new Map();
   records.forEach(record => {
-    const group = getGroup(record, groupBy);
+    const groupList = asArray(getGroup(record, groupBy));
+    groupList.forEach(group => {
     if (!map.has(group.key)) {
       map.set(group.key, {
         key: group.key,
@@ -667,11 +677,12 @@ function aggregateRecords(records, groupBy, categories) {
     if (record.evidenceGeometry) target.evidenceGeometries.push(record.evidenceGeometry);
     if (record.siteGeometry) target.siteGeometries.push(record.siteGeometry);
     target.hasEvidence ||= hasValue(record.evidence_id_old_str) || hasValue(record.id_evd);
-    target.hasSite ||= hasValue(record.site_code) || hasInformativeSiteGroup(record.site_group);
+    target.hasSite ||= hasValue(record.id_site_fdm) || hasValue(record.site_code) || hasInformativeSiteGroup(record.site_group);
     categories.forEach(cat => {
       const value = record.counts[cat] || 0;
       target.counts[cat] += value;
       target.total += value;
+    });
     });
   });
   return [...map.values()];
@@ -684,8 +695,10 @@ function getGroup(record, groupBy) {
     return { key: hasValue(id) ? `su:${id}` : 'su:ND', label, sortValue: toNumber(id) || label };
   }
   if (groupBy === 'evidence') return groupObject('evidence', record.evidence_id_old_str || record.id_evd, record.evidence_id_old_str || record.id_evd);
-  if (groupBy === 'site') return groupObject('site', record.site_code, record.site_code);
+  if (groupBy === 'site') return groupObject('site', siteDisplayName(record), record.id_site_fdm || record.site_code);
   if (groupBy === 'construction_type') return groupObject('construction_type', record.construction_type, record.construction_type);
+  if (groupBy === 'evidence_type') return groupObject('evidence_type', record.evidence_type, record.evidence_type);
+  if (groupBy === 'chrono') return chronoGroupObjects(record);
   if (groupBy === 'municipality') return groupObject('municipality', record.municipality, record.municipality);
   if (groupBy === 'locality') return groupObject('locality', record.locality, record.locality);
   if (groupBy === 'site_group') return groupObject('site_group', hasInformativeSiteGroup(record.site_group) ? record.site_group : '', record.site_group);
@@ -806,7 +819,7 @@ function updateMap(ds) {
   const mapGroup = els.mapGroupSelect.value;
   const metrics = selectedMapMetrics();
   const displayMode = els.mapDisplaySelect.value;
-  const groups = aggregateRecords(ds.records, mapGroup, categories);
+  const groups = aggregateRecords(filteredRecords(ds), mapGroup, categories);
   const { polygonFeatures, bubblePoints, siteFeatures, excluded } = buildMapRenderable(groups, mapGroup, metrics, ds, displayMode);
 
   state.mapLayer.clearLayers();
@@ -932,9 +945,11 @@ function mapProperties(group, value, metrics, ds) {
     __top: topCounts(group.counts, ds, 8),
     __absent: absentCounts(group.counts, ds),
     __recordsDetail: group.records,
-    __site: dominantField(group.records, 'site_code', 'site ND'),
+    __site: dominantSiteLabel(group.records),
     __evidence: dominantField(group.records, 'evidence_id_old_str', 'evidence ND'),
     __construction: dominantField(group.records, 'construction_type', 'construction_type ND'),
+    __evidenceType: dominantField(group.records, 'evidence_type', 'evidence_type ND'),
+    __chrono: dominantChronoLabel(group.records),
   };
 }
 
@@ -942,11 +957,11 @@ function buildSiteOutlineFeatures(groups, metrics, ds) {
   const bySite = new Map();
   groups.forEach(group => {
     group.records.forEach(record => {
-      if (!record.siteGeometry || !hasValue(record.site_code)) return;
-      const key = record.site_code;
+      if (!record.siteGeometry || (!hasValue(record.id_site_fdm) && !hasValue(record.site_code))) return;
+      const key = record.id_site_fdm || record.site_code;
       if (!bySite.has(key)) {
         bySite.set(key, {
-          label: record.site_code,
+          label: siteDisplayName(record),
           records: [],
           counts: Object.fromEntries(ds.categories.map(c => [c, 0])),
           geometries: [],
@@ -1051,7 +1066,7 @@ function renderMapSidebar(p, ds) {
     <div class="map-info-head">
       <span class="mini-label">Selezione mappa</span>
       <h3>${escapeHtml(p.__label)}</h3>
-      <p><strong>Evidence:</strong> ${escapeHtml(p.__evidence || 'evidence ND')}<br><strong>Sito:</strong> ${escapeHtml(p.__site || 'site ND')}<br><strong>Construction type:</strong> ${escapeHtml(p.__construction || 'construction_type ND')}</p>
+      <p><strong>Evidence:</strong> ${escapeHtml(p.__evidence || 'evidence ND')}<br><strong>Sito:</strong> ${escapeHtml(p.__site || 'site ND')}<br><strong>Construction type:</strong> ${escapeHtml(p.__construction || 'construction_type ND')}<br><strong>Evidence type:</strong> ${escapeHtml(p.__evidenceType || 'evidence_type ND')}<br><strong>Chronology:</strong> ${escapeHtml(p.__chrono || 'chronology ND')}</p>
     </div>
     <div class="map-info-kpis">
       <div><strong>${p.__total}</strong><span>totale oggetti</span></div>
@@ -1233,6 +1248,10 @@ function downloadActiveDataset() {
         su_dscu: record.su_dscu,
         id_evd: record.id_evd,
         evidence_id_old_str: record.evidence_id_old_str,
+        evidence_type_id: record.evidence_type_id,
+        evidence_type: record.evidence_type,
+        id_site_fdm: record.id_site_fdm,
+        chrono_gen: record.chrono_gen,
         construction_type_id: record.construction_type_id,
         construction_type: record.construction_type,
         site_code: record.site_code,
@@ -1458,7 +1477,9 @@ function normalizePrecomputed(input, type, sourceName = 'dataset', mapping = nul
     const idSu = valueOrBlank(propByMapping(props, effectiveMapping, 'id_su')) || String(index + 1);
     const suFid = valueOrBlank(props.su_fid || props.fid || idSu);
     const suName = valueOrBlank(propByMapping(props, effectiveMapping, 'su_dscu'));
+    const idSiteFdm = valueOrBlank(propByMapping(props, effectiveMapping, 'id_site_fdm'));
     const siteCode = valueOrBlank(propByMapping(props, effectiveMapping, 'site_code'));
+    const chronoGen = valueOrBlank(propByMapping(props, effectiveMapping, 'chrono_gen'));
     const evidenceName = valueOrBlank(propByMapping(props, effectiveMapping, 'evidence_id_old_str'));
     const municipality = valueOrBlank(propByMapping(props, effectiveMapping, 'municipality'));
     const locality = valueOrBlank(propByMapping(props, effectiveMapping, 'locality'));
@@ -1471,6 +1492,11 @@ function normalizePrecomputed(input, type, sourceName = 'dataset', mapping = nul
       su_dscu: suName,
       id_evd: valueOrBlank(propByMapping(props, effectiveMapping, 'id_evd')),
       evidence_id_old_str: evidenceName,
+      evidence_type_id: valueOrBlank(propByMapping(props, effectiveMapping, 'evidence_type_id')),
+      evidence_type: valueOrBlank(propByMapping(props, effectiveMapping, 'evidence_type')),
+      id_site_fdm: idSiteFdm,
+      chrono_gen: chronoGen,
+      chronology: parseChronology(chronoGen),
       construction_type_id: valueOrBlank(propByMapping(props, effectiveMapping, 'construction_type_id')),
       construction_type: valueOrBlank(propByMapping(props, effectiveMapping, 'construction_type')),
       site_code: siteCode,
@@ -1520,6 +1546,7 @@ function reconstructDatasetFromRaw(raw, type) {
 
   const evidenceById = new Map(raw.evidence.map(row => [asKey(row.id_evd), row]));
   const siteById = new Map(raw.sites.map(row => [asKey(row.id_site), row]));
+  const siteByFdm = new Map(raw.sites.map(row => [asKey(row.id_site_fdm), row]));
   const siteByCode = new Map(raw.sites.map(row => [asKey(row.site_code), row]));
 
   const records = raw.su.map((su, index) => {
@@ -1531,8 +1558,10 @@ function reconstructDatasetFromRaw(raw, type) {
     });
 
     const ev = evidenceById.get(asKey(su.id_evd)) || {};
-    const site = siteById.get(asKey(ev.id_site)) || siteByCode.get(asKey(su.site_code)) || {};
+    const site = siteById.get(asKey(ev.id_site)) || siteByFdm.get(asKey(su.id_site_fdm)) || siteByCode.get(asKey(su.site_code)) || {};
     const constructionVoc = vocById.get(asKey(ev.construction_type));
+    const evidenceTypeVoc = vocById.get(asKey(ev.evidence_type));
+    const chronology = objectChronology(linkedObjects);
     const municipalityVoc = vocById.get(asKey(site.municipality));
     const localityVoc = vocById.get(asKey(site.locality));
     const municipality = valueOrBlank(municipalityVoc?.liv_1_en || municipalityVoc?.liv_1 || site.municipality);
@@ -1545,6 +1574,11 @@ function reconstructDatasetFromRaw(raw, type) {
       su_dscu: valueOrBlank(su.su_dscu),
       id_evd: valueOrBlank(su.id_evd || ev.id_evd),
       evidence_id_old_str: valueOrBlank(ev.id_old_str || ev.evidence_id_old_str),
+      evidence_type_id: valueOrBlank(ev.evidence_type),
+      evidence_type: valueOrBlank(evidenceTypeVoc?.liv_1_en || evidenceTypeVoc?.liv_1 || ev.evidence_type),
+      id_site_fdm: valueOrBlank(site.id_site_fdm || su.id_site_fdm),
+      chrono_gen: chronology.original,
+      chronology,
       construction_type_id: valueOrBlank(ev.construction_type),
       construction_type: valueOrBlank(constructionVoc?.liv_1_en || constructionVoc?.liv_1 || ev.construction_type),
       site_code: valueOrBlank(site.site_code),
@@ -1594,6 +1628,7 @@ function reconstructComboDatasetFromRaw(raw) {
 
   const evidenceById = new Map(raw.evidence.map(row => [asKey(row.id_evd), row]));
   const siteById = new Map(raw.sites.map(row => [asKey(row.id_site), row]));
+  const siteByFdm = new Map(raw.sites.map(row => [asKey(row.id_site_fdm), row]));
   const siteByCode = new Map(raw.sites.map(row => [asKey(row.site_code), row]));
 
   const records = raw.su.map((su, index) => {
@@ -1605,8 +1640,10 @@ function reconstructComboDatasetFromRaw(raw) {
     });
 
     const ev = evidenceById.get(asKey(su.id_evd)) || {};
-    const site = siteById.get(asKey(ev.id_site)) || siteByCode.get(asKey(su.site_code)) || {};
+    const site = siteById.get(asKey(ev.id_site)) || siteByFdm.get(asKey(su.id_site_fdm)) || siteByCode.get(asKey(su.site_code)) || {};
     const constructionVoc = vocById.get(asKey(ev.construction_type));
+    const evidenceTypeVoc = vocById.get(asKey(ev.evidence_type));
+    const chronology = objectChronology(linkedObjects);
     const municipalityVoc = vocById.get(asKey(site.municipality));
     const localityVoc = vocById.get(asKey(site.locality));
     const municipality = valueOrBlank(municipalityVoc?.liv_1_en || municipalityVoc?.liv_1 || site.municipality);
@@ -1619,6 +1656,11 @@ function reconstructComboDatasetFromRaw(raw) {
       su_dscu: valueOrBlank(su.su_dscu),
       id_evd: valueOrBlank(su.id_evd || ev.id_evd),
       evidence_id_old_str: valueOrBlank(ev.id_old_str || ev.evidence_id_old_str),
+      evidence_type_id: valueOrBlank(ev.evidence_type),
+      evidence_type: valueOrBlank(evidenceTypeVoc?.liv_1_en || evidenceTypeVoc?.liv_1 || ev.evidence_type),
+      id_site_fdm: valueOrBlank(site.id_site_fdm || su.id_site_fdm),
+      chrono_gen: chronology.original,
+      chronology,
       construction_type_id: valueOrBlank(ev.construction_type),
       construction_type: valueOrBlank(constructionVoc?.liv_1_en || constructionVoc?.liv_1 || ev.construction_type),
       site_code: valueOrBlank(site.site_code),
@@ -1635,6 +1677,143 @@ function reconstructComboDatasetFromRaw(raw) {
   });
 
   return { type: 'combo', label: TYPE_META.combo.label, sourceName: 'raw tables', records, categories, labels };
+}
+
+
+function populateChronologyControls() {
+  if (!els.chronoFilterSelect) return;
+  const ds = getActiveDataset();
+  const previousMode = selectedChronologySpecialMode();
+  const previous = selectedChronologies();
+  const values = new Set();
+  if (ds) ds.records.forEach(record => {
+    const chrono = record.chronology || parseChronology(record.chrono_gen);
+    chrono.allValues.forEach(v => values.add(v));
+  });
+  const nums = [...values].filter(v => /^\d+$/.test(String(v))).map(Number);
+  const min = nums.length ? Math.min(...nums) : 4;
+  const max = nums.length ? Math.max(...nums) : 10;
+  const ordered = [];
+  for (let n = max; n >= min; n--) ordered.push(String(n));
+  [...values].filter(v => !/^\d+$/.test(String(v))).sort().forEach(v => ordered.push(v));
+  els.chronoFilterSelect.innerHTML =
+    '<option value="__records__">Tutti i record</option>' +
+    '<option value="__all__">Tutte le cronologie</option>' +
+    ordered.map(v => `<option value="${escapeHtml(v)}">${escapeHtml(v)}</option>`).join('');
+  const validPrev = previous.filter(v => ordered.includes(v));
+  [...els.chronoFilterSelect.options].forEach(opt => {
+    if (validPrev.length) opt.selected = validPrev.includes(opt.value);
+    else if (previousMode === '__all__') opt.selected = opt.value === '__all__';
+    else opt.selected = opt.value === '__records__';
+  });
+}
+
+function selectedChronologySpecialMode() {
+  if (!els.chronoFilterSelect) return '__records__';
+  const values = [...els.chronoFilterSelect.selectedOptions].map(opt => opt.value);
+  if (values.includes('__records__')) return '__records__';
+  if (values.includes('__all__')) return '__all__';
+  return '';
+}
+
+function selectedChronologies() {
+  if (!els.chronoFilterSelect) return [];
+  return [...els.chronoFilterSelect.selectedOptions]
+    .map(opt => opt.value)
+    .filter(v => v && v !== '__all__' && v !== '__records__');
+}
+
+function filteredRecords(ds) {
+  if (!ds) return [];
+  const mode = selectedChronologySpecialMode();
+  if (mode === '__records__') return ds.records;
+  const selected = selectedChronologies();
+  const strict = Boolean(els.chronoStrictToggle?.checked);
+  if (!selected.length && mode === '__all__') {
+    return ds.records.filter(record => {
+      const chrono = record.chronology || parseChronology(record.chrono_gen);
+      return strict ? chrono.singleValues.size > 0 : chrono.allValues.size > 0;
+    });
+  }
+  if (!selected.length) return ds.records;
+  return ds.records.filter(record => chronologyMatches(record.chronology || parseChronology(record.chrono_gen), selected, strict));
+}
+
+function chronologyMatches(chrono, selected, strict = false) {
+  if (!chrono) return false;
+  const wanted = selected.map(String);
+  if (strict) return wanted.some(v => chrono.singleValues.has(v));
+  return wanted.some(v => chrono.allValues.has(v));
+}
+
+function parseChronology(value) {
+  const raw = valueOrBlank(value);
+  const parts = raw ? raw.split(';').map(p => p.trim()).filter(Boolean) : [];
+  const singleValues = new Set();
+  const rangeValues = new Set();
+  const allValues = new Set();
+  parts.forEach(part => {
+    const clean = part.replace(/BCE|CE|BC|AD/gi, '').trim();
+    const nums = (clean.match(/\d+/g) || []).map(Number);
+    if (clean.includes('-') && nums.length >= 2) {
+      const a = nums[0], b = nums[1];
+      const lo = Math.min(a, b), hi = Math.max(a, b);
+      for (let n = lo; n <= hi; n++) { rangeValues.add(String(n)); allValues.add(String(n)); }
+    } else if (nums.length >= 1) {
+      const v = String(nums[0]);
+      singleValues.add(v); allValues.add(v);
+    }
+  });
+  return { original: raw, parts, singleValues, rangeValues, allValues };
+}
+
+function chronoGroupObjects(record) {
+  const chrono = record.chronology || parseChronology(record.chrono_gen);
+  const selected = selectedChronologies();
+  const strict = Boolean(els.chronoStrictToggle?.checked);
+  const sourceValues = selected.length
+    ? selected.filter(v => chronologyMatches(chrono, [v], strict))
+    : [...chrono.allValues];
+  const values = [...new Set(sourceValues.map(String))].sort((a,b) => Number(b) - Number(a));
+  if (!values.length) return [groupObject('chrono', '', '')];
+  return values.map(v => ({ key: `chrono:${v}`, label: `Chronology ${v}`, sortValue: -Number(v) || v }));
+}
+
+function dominantChronoLabel(records) {
+  const values = new Set();
+  records.forEach(r => (r.chronology || parseChronology(r.chrono_gen)).allValues.forEach(v => values.add(v)));
+  return [...values].sort((a,b) => Number(b)-Number(a)).join('; ') || 'chronology ND';
+}
+
+function objectChronology(objects) {
+  const unique = [];
+  const seen = new Set();
+  objects.forEach(obj => {
+    const raw = valueOrBlank(obj.chrono_gen || obj.chronology || obj.chrono);
+    raw.split(';').map(p => p.trim()).filter(Boolean).forEach(part => {
+      const clean = part.replace(/BCE|CE|BC|AD/gi, '').trim();
+      const norm = (clean.match(/\d+(?:\s*-\s*\d+)?/) || [''])[0].replace(/\s+/g, '');
+      if (norm && !seen.has(norm)) { seen.add(norm); unique.push(norm); }
+    });
+  });
+  return parseChronology(unique.join('; '));
+}
+
+function asArray(value) { return Array.isArray(value) ? value : [value]; }
+
+function siteDisplayName(record) {
+  const id = hasValue(record.id_site_fdm) ? record.id_site_fdm : '';
+  const code = hasValue(record.site_code) ? record.site_code : '';
+  return id || code || 'site ND';
+}
+
+function dominantSiteLabel(records) {
+  const counts = new Map();
+  records.forEach(r => {
+    const label = siteDisplayName(r);
+    counts.set(label, (counts.get(label) || 0) + 1);
+  });
+  return [...counts.entries()].sort((a,b) => b[1]-a[1])[0]?.[0] || 'site ND';
 }
 
 function labelFromCategory(cat) {
@@ -1681,10 +1860,9 @@ function toNumber(value) {
 function percentage(value, total) { return total > 0 ? ((value || 0) / total * 100) : 0; }
 function percent(value, total) { return percentage(value, total); }
 function usDisplayName(record) {
-  const name = hasValue(record.su_dscu) ? record.su_dscu : `US ${record.id_su || record.su_fid || '?'}`;
-  const site = hasValue(record.site_code) ? ` - ${record.site_code}` : '';
-  const id = record.id_su || record.su_fid || '?';
-  return `${name}${site} (id ${id})`;
+  const us = hasValue(record.id_su) ? record.id_su : (hasValue(record.su_dscu) ? record.su_dscu : (record.su_fid || '?'));
+  const site = siteDisplayName(record);
+  return site && site !== 'site ND' ? `${us} (${site})` : `${us}`;
 }
 function clamp(value, min, max) { return Math.max(min, Math.min(max, value)); }
 function compactLabel(value, max = 34) {

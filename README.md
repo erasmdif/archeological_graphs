@@ -2,7 +2,7 @@
 
 Ambiente web statico, pubblicabile su GitHub Pages, per visualizzare conteggi archeologici aggregati per US, evidence, sito e construction type.
 
-## Cosa include la v6
+## Cosa include la v7
 
 - quattro dataset supportati:
   - `material_class`;
@@ -19,7 +19,10 @@ Ambiente web statico, pubblicabile su GitHub Pages, per visualizzare conteggi ar
   - se non ci sono colonne `n_*`, vengono usati i campi numerici come categorie;
   - se i nomi dei campi descrittivi non coincidono con quelli attesi, la dashboard mostra una mappatura tramite menù a tendina;
 - supporto a `combo_counts_json` per la query dinamica JSON delle combinazioni materiale × morfologia;
-- pagina `catalog.html` con modalità singolo record e confronto affiancato.
+- pagina `catalog.html` con modalità singolo record e confronto affiancato;
+- supporto a `id_site_fdm` come identificativo ufficiale del sito;
+- supporto a `evidence_type` come nuovo livello di raggruppamento;
+- supporto a `chrono_gen` come filtro multi-scelta e livello di raggruppamento, con gestione dei range cronologici `8-6`.
 
 ## Avvio rapido locale
 
@@ -56,7 +59,10 @@ Il formato più comodo è un GeoJSON `FeatureCollection` con una feature per ogn
 - `id_evd`
 - `evidence_id_old_str`
 - `construction_type`
+- `id_site_fdm`
 - `site_code`
+- `evidence_type`
+- `chrono_gen`
 - `municipality`
 - `locality`
 - `address`
@@ -64,6 +70,20 @@ Il formato più comodo è un GeoJSON `FeatureCollection` con una feature per ogn
 - colonne numeriche di conteggio, preferibilmente nel formato `n_*`.
 
 Se usi nomi diversi per i campi descrittivi, il caricamento mostra una sezione di mappatura. Le colonne numeriche extra vengono trattate come categorie, se non ci sono colonne `n_*` o colonne attese.
+
+
+## Cronologie
+
+Il campo `chrono_gen` può contenere valori singoli o multipli separati da punto e virgola, per esempio:
+
+```text
+7
+5; 7
+7-6
+8-6; 7
+```
+
+La dashboard espande i range: `8-6` vale per `8`, `7` e `6`. Il toggle **Escludi range dubbi** mantiene solo le US in cui la cronologia filtrata compare anche come valore singolo tra i blocchi separati da `;`.
 
 ## Query combinatoria dinamica
 

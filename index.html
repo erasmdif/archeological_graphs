@@ -115,6 +115,8 @@
             <option value="su">US</option>
             <option value="evidence">Evidence</option>
             <option value="construction_type">Construction type</option>
+            <option value="evidence_type">Evidence type</option>
+            <option value="chrono">Chronology</option>
             <option value="site">Site</option>
             <option value="municipality">Municipality</option>
             <option value="locality">Locality</option>
@@ -131,6 +133,14 @@
             <option value="count">Conteggi assoluti</option>
             <option value="share">Percentuali per gruppo</option>
           </select>
+        </label>
+        <label>
+          Filtro cronologico
+          <select id="chronoFilterSelect" multiple size="7"></select>
+        </label>
+        <label class="toggle-control">
+          <span>Escludi range dubbi</span>
+          <input id="chronoStrictToggle" type="checkbox" />
         </label>
       </div>
     </section>
@@ -199,7 +209,9 @@
           <select id="mapGroupSelect">
             <option value="su">US</option>
             <option value="evidence">Evidence</option>
+            <option value="evidence_type">Evidence type</option>
             <option value="site">Site</option>
+            <option value="chrono">Chronology</option>
           </select>
         </label>
         <label>

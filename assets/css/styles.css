@@ -497,7 +497,7 @@ select, input[type="number"], input[type="search"], input[type="text"] {
 
 .catalog-controls {
   display: grid;
-  grid-template-columns: repeat(6, minmax(0, 1fr));
+  grid-template-columns: repeat(8, minmax(0, 1fr));
   gap: 12px;
   margin-top: 16px;
 }
@@ -763,7 +763,7 @@ select[multiple] option {
   color: var(--muted);
   font-size: .92rem;
 }
-.chart-control-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+.chart-control-grid { grid-template-columns: repeat(6, minmax(0, 1fr)); }
 .map-controls-panel { padding-top: 16px; }
 .map-control-grid {
   grid-template-columns: 1fr 1.25fr 1fr 1fr 2fr auto;
@@ -783,4 +783,29 @@ select[multiple] option {
   .field-mapping-grid,
   .chart-control-grid,
   .map-control-grid { grid-template-columns: 1fr; }
+}
+
+.toggle-control {
+  align-self: stretch;
+  display: flex !important;
+  flex-direction: column;
+  justify-content: center;
+  gap: 10px !important;
+  padding: 10px 12px;
+  border-radius: 14px;
+  background: rgba(255,255,255,0.70);
+  border: 1px solid var(--line);
+}
+.toggle-control input[type="checkbox"] {
+  width: 42px;
+  height: 22px;
+  accent-color: var(--primary);
+}
+select[multiple] {
+  min-height: 124px;
+  padding: 8px;
+}
+select[multiple] option {
+  padding: 6px 8px;
+  border-radius: 8px;
 }

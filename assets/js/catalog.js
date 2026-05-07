@@ -24,7 +24,7 @@ const els = {};
 window.addEventListener('DOMContentLoaded', () => {
   [
     'loadCatalogDemo', 'loadCatalogFiles', 'catalogMaterialFile', 'catalogMorphologyFile', 'catalogCategoryFile', 'catalogComboFile',
-    'catalogDataset', 'catalogLevel', 'catalogItem', 'catalogItemA', 'catalogItemB', 'catalogBreakdown',
+    'catalogDataset', 'catalogLevel', 'catalogItem', 'catalogItemA', 'catalogItemB', 'catalogBreakdown', 'catalogChronoFilter', 'catalogChronoStrict',
     'catalogTopCategories', 'catalogTopChildren', 'catalogNarrative',
     'kpiTotal', 'kpiDiversity', 'kpiDominant', 'kpiCoherence', 'catalogTableBody',
     'catalogCompareSection', 'catalogSingleTop', 'catalogSingleCharts', 'catalogSingleTable',
@@ -47,10 +47,10 @@ function bindEvents() {
       renderCatalog();
     });
   });
-  ['catalogDataset', 'catalogLevel', 'catalogBreakdown', 'catalogTopCategories', 'catalogTopChildren'].forEach(id => {
+  ['catalogDataset', 'catalogLevel', 'catalogBreakdown', 'catalogTopCategories', 'catalogTopChildren', 'catalogChronoFilter', 'catalogChronoStrict'].forEach(id => {
     els[id].addEventListener('change', () => {
-      if (id === 'catalogDataset') catalogState.activeType = els.catalogDataset.value;
-      if (id === 'catalogDataset' || id === 'catalogLevel') populateCatalogItems();
+      if (id === 'catalogDataset') { catalogState.activeType = els.catalogDataset.value; populateChronologyControls(); }
+      if (id === 'catalogDataset' || id === 'catalogLevel' || id === 'catalogChronoFilter' || id === 'catalogChronoStrict') populateCatalogItems();
       renderCatalog();
     });
   });
@@ -121,6 +121,7 @@ async function loadDemo() {
     catalogState.datasets.combo = normalizeDataset(combo, 'combo', 'material_morph_combo.geojson');
     catalogState.activeType = 'material';
     els.catalogDataset.value = 'material';
+    populateChronologyControls();
     populateCatalogItems();
     renderCatalog();
   } catch (error) {
@@ -142,6 +143,7 @@ async function loadFiles() {
     }
     if (!catalogState.datasets[catalogState.activeType]) catalogState.activeType = Object.keys(files).find(k => files[k]) || 'material';
     els.catalogDataset.value = catalogState.activeType;
+    populateChronologyControls();
     populateCatalogItems();
     renderCatalog();
   } catch (error) {
@@ -154,7 +156,7 @@ function populateCatalogItems() {
   [els.catalogItem, els.catalogItemA, els.catalogItemB].forEach(el => { if (el) el.innerHTML = ''; });
   if (!ds) return;
   const level = els.catalogLevel.value;
-  const groups = aggregate(ds.records, level, ds.categories).sort((a, b) => b.total - a.total || naturalSort(a.label, b.label));
+  const groups = aggregate(filteredRecords(ds), level, ds.categories).sort((a, b) => b.total - a.total || naturalSort(a.label, b.label));
   groups.forEach((group, idx) => {
     [els.catalogItem, els.catalogItemA, els.catalogItemB].forEach((el, panelIdx) => {
       if (!el) return;
@@ -180,7 +182,7 @@ function renderSingle(ds) {
   const selectedKey = els.catalogItem.value;
   const topCatN = clamp(parseInt(els.catalogTopCategories.value, 10) || 8, 3, 20);
   const topChildN = clamp(parseInt(els.catalogTopChildren.value, 10) || 24, 3, 80);
-  const allGroups = aggregate(ds.records, level, ds.categories).sort((a, b) => b.total - a.total);
+  const allGroups = aggregate(filteredRecords(ds), level, ds.categories).sort((a, b) => b.total - a.total);
   const selected = allGroups.find(g => g.key === selectedKey) || allGroups[0];
   if (!selected) return renderEmpty();
   if (els.catalogItem.value !== selected.key) els.catalogItem.value = selected.key;
@@ -197,7 +199,7 @@ function renderCompare(ds) {
   const level = els.catalogLevel.value;
   const topCatN = clamp(parseInt(els.catalogTopCategories.value, 10) || 8, 3, 14);
   const topChildN = clamp(parseInt(els.catalogTopChildren.value, 10) || 12, 3, 30);
-  const groups = aggregate(ds.records, level, ds.categories).sort((a, b) => b.total - a.total);
+  const groups = aggregate(filteredRecords(ds), level, ds.categories).sort((a, b) => b.total - a.total);
   const a = groups.find(g => g.key === els.catalogItemA.value) || groups[0];
   const b = groups.find(g => g.key === els.catalogItemB.value) || groups[1] || groups[0];
   if (!a || !b) return renderEmpty();
@@ -295,17 +297,20 @@ function resolveBreakdown(level, requested) {
   if (level === 'evidence') return 'su';
   if (level === 'site') return 'evidence';
   if (level === 'construction_type') return 'site';
+  if (level === 'evidence_type') return 'site';
+  if (level === 'chrono') return 'evidence';
   return 'su';
 }
 
 function aggregate(records, groupBy, categories) {
   const map = new Map();
   records.forEach(record => {
-    const group = groupFor(record, groupBy);
+    asArray(groupFor(record, groupBy)).forEach(group => {
     if (!map.has(group.key)) map.set(group.key, { key: group.key, label: group.label, sortValue: group.sortValue, records: [], counts: Object.fromEntries(categories.map(cat => [cat, 0])), total: 0 });
     const target = map.get(group.key);
     target.records.push(record);
     categories.forEach(cat => { const v = record.counts[cat] || 0; target.counts[cat] += v; target.total += v; });
+    });
   });
   return [...map.values()];
 }
@@ -313,8 +318,10 @@ function aggregate(records, groupBy, categories) {
 function groupFor(record, groupBy) {
   if (groupBy === 'su') { const id = record.id_su || record.su_fid || 'ND'; return { key: `su:${id}`, label: usDisplayName(record), sortValue: Number(id) || id }; }
   if (groupBy === 'evidence') return groupObject('evidence', record.evidence_id_old_str || record.id_evd);
-  if (groupBy === 'site') return groupObject('site', record.site_code);
+  if (groupBy === 'site') return groupObject('site', siteDisplayName(record));
   if (groupBy === 'construction_type') return groupObject('construction_type', record.construction_type);
+  if (groupBy === 'evidence_type') return groupObject('evidence_type', record.evidence_type);
+  if (groupBy === 'chrono') return chronoGroupObjects(record);
   return groupObject(groupBy, record[groupBy]);
 }
 function groupObject(kind, value) { const clean = hasValue(value) ? String(value).trim() : `${kind} ND`; const isNd = clean === '-' || clean.replace(/[-\s]/g, '') === '' || clean.toLowerCase().includes('nd'); const label = isNd ? `${kind} ND` : clean; return { key: `${kind}:${label}`, label, sortValue: label }; }
@@ -366,6 +373,11 @@ function normalizeDataset(input, type, sourceName = 'dataset') {
       id_evd: valueOrBlank(props.id_evd || props.evidence_id || props.id_evidence),
       evidence_id_old_str: valueOrBlank(props.evidence_id_old_str || props.id_old_str || props.evidence_name || props.evidence_code),
       construction_type: valueOrBlank(props.construction_type || props.construction || props.ctype),
+      evidence_type_id: valueOrBlank(props.evidence_type_id || props.id_evidence_type || props.id_evid_type),
+      evidence_type: valueOrBlank(props.evidence_type || props.evid_type || props.type_evidence || props.evidence_typology),
+      id_site_fdm: valueOrBlank(props.id_site_fdm || props.site_fdm || props.fdm_site_id),
+      chrono_gen: valueOrBlank(props.chrono_gen || props.chronology || props.chrono || props.period || props.periodo),
+      chronology: parseChronology(props.chrono_gen || props.chronology || props.chrono || props.period || props.periodo),
       site_code: valueOrBlank(props.site_code || props.site || props.site_id || props.codice_sito),
       municipality: valueOrBlank(props.municipality || props.comune),
       locality: valueOrBlank(props.locality || props.localita || props['località']),
@@ -377,6 +389,40 @@ function normalizeDataset(input, type, sourceName = 'dataset') {
   });
   return { type, sourceName, label: META[type].label, records, categories, labels: Object.fromEntries(categories.map(cat => [cat, labelFromCategory(cat)])) };
 }
+
+
+function populateChronologyControls() {
+  if (!els.catalogChronoFilter) return;
+  const ds = getDataset();
+  const previousMode = selectedChronologySpecialMode();
+  const previous = selectedChronologies();
+  const values = new Set();
+  if (ds) ds.records.forEach(record => (record.chronology || parseChronology(record.chrono_gen)).allValues.forEach(v => values.add(v)));
+  const nums = [...values].filter(v => /^\d+$/.test(String(v))).map(Number);
+  const min = nums.length ? Math.min(...nums) : 4;
+  const max = nums.length ? Math.max(...nums) : 10;
+  const ordered = [];
+  for (let n = max; n >= min; n--) ordered.push(String(n));
+  [...values].filter(v => !/^\d+$/.test(String(v))).sort().forEach(v => ordered.push(v));
+  els.catalogChronoFilter.innerHTML =
+    '<option value="__records__">Tutti i record</option>' +
+    '<option value="__all__">Tutte le cronologie</option>' +
+    ordered.map(v => `<option value="${escapeHtml(v)}">${escapeHtml(v)}</option>`).join('');
+  const validPrev = previous.filter(v => ordered.includes(v));
+  [...els.catalogChronoFilter.options].forEach(opt => {
+    if (validPrev.length) opt.selected = validPrev.includes(opt.value);
+    else if (previousMode === '__all__') opt.selected = opt.value === '__all__';
+    else opt.selected = opt.value === '__records__';
+  });
+}
+function selectedChronologySpecialMode() { if (!els.catalogChronoFilter) return '__records__'; const values = [...els.catalogChronoFilter.selectedOptions].map(opt => opt.value); if (values.includes('__records__')) return '__records__'; if (values.includes('__all__')) return '__all__'; return ''; }
+function selectedChronologies() { if (!els.catalogChronoFilter) return []; return [...els.catalogChronoFilter.selectedOptions].map(opt => opt.value).filter(v => v && v !== '__all__' && v !== '__records__'); }
+function filteredRecords(ds) { if (!ds) return []; const mode = selectedChronologySpecialMode(); if (mode === '__records__') return ds.records; const selected = selectedChronologies(); const strict = Boolean(els.catalogChronoStrict?.checked); if (!selected.length && mode === '__all__') return ds.records.filter(record => { const chrono = record.chronology || parseChronology(record.chrono_gen); return strict ? chrono.singleValues.size > 0 : chrono.allValues.size > 0; }); if (!selected.length) return ds.records; return ds.records.filter(record => chronologyMatches(record.chronology || parseChronology(record.chrono_gen), selected, strict)); }
+function chronologyMatches(chrono, selected, strict = false) { const wanted = selected.map(String); if (strict) return wanted.some(v => chrono.singleValues.has(v)); return wanted.some(v => chrono.allValues.has(v)); }
+function parseChronology(value) { const raw = valueOrBlank(value); const parts = raw ? raw.split(';').map(p => p.trim()).filter(Boolean) : []; const singleValues = new Set(), rangeValues = new Set(), allValues = new Set(); parts.forEach(part => { const clean = part.replace(/BCE|CE|BC|AD/gi, '').trim(); const nums = (clean.match(/\d+/g) || []).map(Number); if (clean.includes('-') && nums.length >= 2) { const lo = Math.min(nums[0], nums[1]), hi = Math.max(nums[0], nums[1]); for (let n=lo; n<=hi; n++) { rangeValues.add(String(n)); allValues.add(String(n)); } } else if (nums.length) { const v=String(nums[0]); singleValues.add(v); allValues.add(v); } }); return { original: raw, parts, singleValues, rangeValues, allValues }; }
+function chronoGroupObjects(record) { const chrono = record.chronology || parseChronology(record.chrono_gen); const selected = selectedChronologies(); const strict = Boolean(els.catalogChronoStrict?.checked); const source = selected.length ? selected.filter(v => chronologyMatches(chrono, [v], strict)) : [...chrono.allValues]; const values = [...new Set(source.map(String))].sort((a,b)=>Number(b)-Number(a)); if (!values.length) return [groupObject('chrono', '')]; return values.map(v => ({ key:`chrono:${v}`, label:`Chronology ${v}`, sortValue:-Number(v)||v })); }
+function asArray(value) { return Array.isArray(value) ? value : [value]; }
+function siteDisplayName(record) { const id = hasValue(record.id_site_fdm) ? record.id_site_fdm : ''; const code = hasValue(record.site_code) ? record.site_code : ''; return id || code || 'site ND'; }
 
 function isNumericLike(value) { if (value === null || value === undefined || value === '') return false; const n = Number(String(value).replace(',', '.')); return Number.isFinite(n); }
 
@@ -394,6 +440,6 @@ function percent(value, total) { return total > 0 ? (value || 0) / total * 100 :
 function clamp(value, min, max) { return Math.max(min, Math.min(max, value)); }
 function compact(value, max = 32) { const s = String(value || 'ND'); return s.length > max ? `${s.slice(0, max - 1)}…` : s; }
 function naturalSort(a, b) { const na = Number(a), nb = Number(b); if (Number.isFinite(na) && Number.isFinite(nb)) return na - nb; return String(a).localeCompare(String(b), 'it', { numeric: true, sensitivity: 'base' }); }
-function usDisplayName(record) { const name = hasValue(record.su_dscu) ? record.su_dscu : `US ${record.id_su || record.su_fid || '?'}`; const site = hasValue(record.site_code) ? ` - ${record.site_code}` : ''; const id = record.id_su || record.su_fid || '?'; return `${name}${site} (id ${id})`; }
-function escapeHtml(value) { return String(value ?? '').replace(/[&<>'"]/g, ch => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#039;', '"': '&quot;' }[ch])); }const META_FIELD_NAMES = new Set(['fid','id','id_su','su_fid','su_dscu','id_evd','evidence_id_old_str','id_old_str','construction_type','site_code','municipality','locality','address','site_group','geometry','geom']);
+function usDisplayName(record) { const us = hasValue(record.id_su) ? record.id_su : (hasValue(record.su_dscu) ? record.su_dscu : (record.su_fid || '?')); const site = siteDisplayName(record); return site && site !== 'site ND' ? `${us} (${site})` : `${us}`; }
+function escapeHtml(value) { return String(value ?? '').replace(/[&<>'"]/g, ch => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#039;', '"': '&quot;' }[ch])); }const META_FIELD_NAMES = new Set(['fid','id','id_su','su_fid','su_dscu','id_evd','evidence_id_old_str','id_old_str','construction_type','evidence_type_id','evidence_type','id_site_fdm','chrono_gen','site_code','municipality','locality','address','site_group','geometry','geom']);
 
