@@ -2,6 +2,8 @@ const state = {
   records: [],
   sourceName: '',
   charts: {},
+  decorChartMode: 'donut',
+  descriptions: {},
 };
 
 const els = {};
@@ -18,8 +20,8 @@ function cacheEls() {
   [
     'decorStatus', 'decorFile', 'loadDecorFile', 'loadDecorDemo',
     'decorDimension', 'decorTrendGroup', 'decorRelatedDimension', 'decorChronoMode', 'decorChronoFilter', 'decorChronoStrict',
-    'decorTopCategories', 'decorTopGroups', 'decorDonutDescription', 'decorTrendDescription',
-    'decorTechOrnDescription', 'decorPositionDescription', 'decorRelatedDescription',
+    'decorTopCategories', 'decorTopGroups', 'decorChartModeSwitcher', 'decorActiveTitle', 'decorActiveDescription',
+    'downloadDecorPng', 'downloadDecorCsv', 'downloadDecorGeojson', 'downloadDecorZip',
     'decorSummaryStats', 'decorTableWrap'
   ].forEach(id => { els[id] = document.getElementById(id); });
 }
@@ -31,6 +33,15 @@ function bindEvents() {
     els[id].addEventListener('change', updateAll);
     els[id].addEventListener('input', updateAll);
   });
+  if (els.decorChartModeSwitcher) {
+    els.decorChartModeSwitcher.querySelectorAll('[data-decor-chart-mode]').forEach(btn => {
+      btn.addEventListener('click', () => setDecorChartMode(btn.dataset.decorChartMode));
+    });
+  }
+  if (els.downloadDecorPng) els.downloadDecorPng.addEventListener('click', () => downloadDecorExport('png'));
+  if (els.downloadDecorCsv) els.downloadDecorCsv.addEventListener('click', () => downloadDecorExport('csv'));
+  if (els.downloadDecorGeojson) els.downloadDecorGeojson.addEventListener('click', () => downloadDecorExport('geojson'));
+  if (els.downloadDecorZip) els.downloadDecorZip.addEventListener('click', () => downloadDecorExport('zip'));
 }
 
 function initChartDefaults() {
@@ -119,6 +130,8 @@ function updateAll() {
   renderDecorationPositionMatrix(filtered);
   renderRelatedMatrix(filtered);
   renderTable(filtered);
+  updateDecorActiveInfo();
+  setTimeout(() => { const chart = state.charts[activeDecorCanvasId()]; if (chart && typeof chart.resize === 'function') chart.resize(); }, 0);
   const modeText = els.decorChronoMode.selectedOptions[0]?.textContent || '';
   els.decorSummaryStats.textContent = `${filtered.length} / ${state.records.length} record · ${modeText}`;
 }
@@ -153,7 +166,7 @@ function renderDonut(records) {
     }
   });
 
-  els.decorDonutDescription.textContent = `Distribuzione per ${dimensionLabel(dimension)} sul dataset filtrato. Le categorie meno frequenti vengono raggruppate in “Other”.`;
+  state.descriptions.donut = { title: 'Distribuzione percentuale', text: `Distribuzione per ${dimensionLabel(dimension)} sul dataset filtrato. Le categorie meno frequenti vengono raggruppate in “Other”.` };
 }
 
 function renderTrend(records) {
@@ -190,21 +203,21 @@ function renderTrend(records) {
     plugins: { tooltip: { mode: 'index', intersect: false } }
   });
 
-  els.decorTrendDescription.textContent = `Andamento delle principali voci per ${dimensionLabel(dimension)}, raggruppate per ${groupLabel(trendGroup)}.`;
+  state.descriptions.trend = { title: 'Tendenza per contesto', text: `Andamento delle principali voci per ${dimensionLabel(dimension)}, raggruppate per ${groupLabel(trendGroup)}.` };
 }
 
 function renderTechOrnMatrix(records) {
   const topN = clamp(Number(els.decorTopCategories.value) || 12, 3, 30);
   const data = matrixData(records, r => r.technique || 'technique ND', r => r.ornament || 'ornament ND', topN, topN);
   renderBubbleMatrix('decorTechOrnChart', data, 'dec_tecn_type', 'dec_ornt', 205);
-  els.decorTechOrnDescription.textContent = 'Matrice a bolle: asse X = tecnica, asse Y = ornato; la dimensione indica il numero di occorrenze.';
+  state.descriptions.techorn = { title: 'dec_tecn_type × dec_ornt', text: 'Matrice a bolle: asse X = tecnica, asse Y = ornato; la dimensione indica il numero di occorrenze.' };
 }
 
 function renderDecorationPositionMatrix(records) {
   const topN = clamp(Number(els.decorTopCategories.value) || 12, 3, 30);
   const data = matrixData(records, r => r.decoration || 'decoration ND', r => r.position || 'position ND', topN, 18);
   renderBubbleMatrix('decorPositionChart', data, 'decoration', 'position', 160);
-  els.decorPositionDescription.textContent = 'Matrice a bolle: ogni punto mostra quante volte una decorazione completa compare in una posizione dell’oggetto.';
+  state.descriptions.position = { title: 'decoration × position', text: 'Matrice a bolle: ogni punto mostra quante volte una decorazione completa compare in una posizione dell’oggetto.' };
 }
 
 function renderRelatedMatrix(records) {
@@ -219,13 +232,13 @@ function renderRelatedMatrix(records) {
       labels: ['Campo non presente'],
       datasets: [{ label: 'Nessun dato', data: [0], backgroundColor: ['rgba(224,91,116,0.18)'] }]
     }, baseChartOptions());
-    els.decorRelatedDescription.textContent = `Il dataset non contiene un campo leggibile per ${related === 'material' ? 'material_class' : 'morphological_class'}.`;
+    state.descriptions.related = { title: 'Decoration × material/morphological class', text: `Il dataset non contiene un campo leggibile per ${related === 'material' ? 'material_class' : 'morphological_class'}.` };
     return;
   }
 
   const data = matrixData(rowsWithRelated, r => getDimensionValue(r, dimension), yAccessor, topN, 18);
   renderBubbleMatrix('decorRelatedChart', data, dimensionLabel(dimension), related === 'material' ? 'material_class' : 'morphological_class', 288);
-  els.decorRelatedDescription.textContent = `Correlazione tra ${dimensionLabel(dimension)} e ${related === 'material' ? 'classe di materiale' : 'classe morfologica'}.`;
+  state.descriptions.related = { title: 'Decoration × material/morphological class', text: `Correlazione tra ${dimensionLabel(dimension)} e ${related === 'material' ? 'classe di materiale' : 'classe morfologica'}.` };
 }
 
 function renderBubbleMatrix(canvasId, matrix, xTitle, yTitle, hueStart) {
@@ -426,6 +439,7 @@ function normalizeDecorations(input, sourceName) {
       material: clean(p.material_class_en || p.material_class || p.material || p.material_class_label || ''),
       morphology: clean(p.morphological_class_en || p.morphological_class || p.morphology || p.morphological_class_label || ''),
       weight: Math.max(1, toNumber(p.qt_dec_total || p.n_obj_dec_links || 1)),
+      geometry: row.geometry || null,
       raw: p,
     };
   });
@@ -464,6 +478,163 @@ function parseFile(file) {
     };
     reader.readAsText(file);
   });
+}
+
+
+function setDecorChartMode(mode) {
+  state.decorChartMode = mode || 'donut';
+  document.querySelectorAll('[data-decor-chart-mode]').forEach(btn => btn.classList.toggle('active', btn.dataset.decorChartMode === state.decorChartMode));
+  document.querySelectorAll('[data-decor-pane]').forEach(pane => pane.classList.toggle('active', pane.dataset.decorPane === state.decorChartMode));
+  updateDecorActiveInfo();
+  setTimeout(() => {
+    const chart = state.charts[activeDecorCanvasId()];
+    if (chart && typeof chart.resize === 'function') chart.resize();
+  }, 0);
+}
+
+function updateDecorActiveInfo() {
+  const info = state.descriptions[state.decorChartMode] || { title: 'Grafico decorations', text: 'Carica i dati per iniziare.' };
+  if (els.decorActiveTitle) els.decorActiveTitle.textContent = info.title;
+  if (els.decorActiveDescription) els.decorActiveDescription.textContent = info.text;
+}
+
+function activeDecorCanvasId() {
+  return ({ donut: 'decorDonutChart', trend: 'decorTrendChart', techorn: 'decorTechOrnChart', position: 'decorPositionChart', related: 'decorRelatedChart' })[state.decorChartMode] || 'decorDonutChart';
+}
+
+async function downloadDecorExport(format) {
+  const pack = buildDecorExportPackage();
+  if (!pack) return setStatus('Nessun dato esportabile.', true);
+  const base = makeSafeFilename(`decorations_${pack.mode}_${pack.chronoLabel}`);
+  if (format === 'png') {
+    const blob = await chartToPngBlob(activeDecorCanvasId());
+    if (blob) downloadBlob(blob, `${base}.png`);
+    return;
+  }
+  if (format === 'csv') {
+    downloadBlob(new Blob([toCsv(pack.rows)], { type: 'text/csv;charset=utf-8' }), `${base}.csv`);
+    return;
+  }
+  if (format === 'geojson') {
+    downloadBlob(new Blob([JSON.stringify(pack.geojson, null, 2)], { type: 'application/geo+json' }), `${base}.geojson`);
+    return;
+  }
+  if (format === 'zip') {
+    if (!window.JSZip) return setStatus('JSZip non disponibile: impossibile creare lo ZIP.', true);
+    const zip = new JSZip();
+    const png = await chartToPngBlob(activeDecorCanvasId());
+    if (png) zip.file(`${base}.png`, png);
+    zip.file(`${base}.csv`, toCsv(pack.rows));
+    zip.file(`${base}.geojson`, JSON.stringify(pack.geojson, null, 2));
+    zip.file(`${base}_metadata.json`, JSON.stringify(pack.metadata, null, 2));
+    const blob = await zip.generateAsync({ type: 'blob' });
+    downloadBlob(blob, `${base}.zip`);
+  }
+}
+
+function buildDecorExportPackage() {
+  if (!state.records.length) return null;
+  const filtered = filterByChronology(state.records);
+  const mode = state.decorChartMode;
+  const dimension = els.decorDimension.value;
+  const topN = clamp(Number(els.decorTopCategories.value) || 12, 3, 30);
+  let rows = [];
+  if (mode === 'donut') {
+    const totalRows = aggregateDimension(filtered, dimension).sort((a,b) => b.value - a.value);
+    const total = totalRows.reduce((s,r) => s + r.value, 0);
+    rows = totalRows.map(r => ({ dimension: dimensionLabel(dimension), key: r.key, label: r.label, count: r.value, percent: total ? r.value / total * 100 : 0 }));
+  } else if (mode === 'trend') {
+    const topCats = aggregateDimension(filtered, dimension).sort((a,b) => b.value - a.value).slice(0, 7).map(r => r.key);
+    rows = aggregateByGroup(filtered, els.decorTrendGroup.value, dimension, topCats).map(g => {
+      const row = { group_key: g.key, group_label: g.label, total: g.total };
+      topCats.forEach(cat => { row[cat] = g.counts[cat] || 0; row[`${cat}_percent`] = g.total ? (g.counts[cat] || 0) / g.total * 100 : 0; });
+      return row;
+    });
+  } else if (mode === 'techorn') {
+    rows = matrixData(filtered, r => r.technique || 'technique ND', r => r.ornament || 'ornament ND', topN, topN).points.map(p => ({ dec_tecn_type: p.x, dec_ornt: p.y, count: p.v }));
+  } else if (mode === 'position') {
+    rows = matrixData(filtered, r => r.decoration || 'decoration ND', r => r.position || 'position ND', topN, 18).points.map(p => ({ decoration: p.x, position: p.y, count: p.v }));
+  } else if (mode === 'related') {
+    const related = els.decorRelatedDimension.value;
+    const yAccessor = related === 'material' ? r => r.material || '' : r => r.morphology || '';
+    rows = matrixData(filtered.filter(r => clean(yAccessor(r))), r => getDimensionValue(r, dimension), yAccessor, topN, 18).points.map(p => ({ decorative_value: p.x, related_value: p.y, related_dimension: related, count: p.v }));
+  }
+  const geojson = {
+    type: 'FeatureCollection',
+    name: 'decorations_export',
+    features: filtered.map((record, i) => ({
+      type: 'Feature',
+      geometry: record.geometry || null,
+      properties: {
+        uid: record.uid,
+        decoration: record.decoration,
+        dec_tecn_type: record.technique,
+        dec_ornt: record.ornament,
+        position: record.position,
+        material_class: record.material,
+        morphological_class: record.morphology,
+        id_obj: record.id_obj,
+        id_su: record.id_su,
+        us_label: record.su_label,
+        evidence: record.evidence_label,
+        site: record.site_label,
+        evidence_type: record.evidence_type,
+        construction_type: record.construction_type,
+        chrono_gen: record.chrono_gen,
+        weight: record.weight,
+      }
+    }))
+  };
+  return { mode, rows, geojson, chronoLabel: decorChronologyExportLabel(), metadata: { exported_at: new Date().toISOString(), source: state.sourceName, mode, dimension, chronology_filter: decorChronologyExportLabel(), records_after_filters: filtered.length } };
+}
+
+function decorChronologyExportLabel() {
+  const mode = els.decorChronoMode.value;
+  if (mode === 'all_records') return 'tutti_record';
+  if (mode === 'all_chronologies') return 'tutte_cronologie';
+  const selected = [...els.decorChronoFilter.selectedOptions].map(opt => opt.value);
+  return selected.length ? `chrono_${selected.join('_')}${els.decorChronoStrict.checked ? '_strict' : ''}` : 'chrono_selected_all';
+}
+
+async function chartToPngBlob(canvasId) {
+  const canvas = document.getElementById(canvasId);
+  if (!canvas) return null;
+  const scale = 2;
+  const out = document.createElement('canvas');
+  out.width = Math.max(1, canvas.width * scale);
+  out.height = Math.max(1, canvas.height * scale);
+  const ctx = out.getContext('2d');
+  ctx.fillStyle = '#ffffff';
+  ctx.fillRect(0, 0, out.width, out.height);
+  ctx.drawImage(canvas, 0, 0, out.width, out.height);
+  return new Promise(resolve => out.toBlob(resolve, 'image/png', 1));
+}
+
+function downloadBlob(blob, filename) {
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
+}
+
+function toCsv(rows) {
+  if (!rows || !rows.length) return '';
+  const cols = [];
+  rows.forEach(row => Object.keys(row).forEach(key => { if (!cols.includes(key)) cols.push(key); }));
+  const esc = value => {
+    if (value === null || value === undefined) return '';
+    const s = typeof value === 'object' ? JSON.stringify(value) : String(value);
+    return /[",\n;]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+  };
+  return [cols.join(','), ...rows.map(row => cols.map(col => esc(row[col])).join(','))].join('\n');
+}
+
+function makeSafeFilename(value) {
+  return String(value || 'export').normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-zA-Z0-9._-]+/g, '_').replace(/^_+|_+$/g, '').slice(0, 150) || 'export';
 }
 
 function fetchJson(url) {

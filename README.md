@@ -109,3 +109,20 @@ La colonna può chiamarsi:
 - Leaflet
 - PapaParse
 - Bootstrap Icons
+
+
+## Decorations
+
+La sezione `decorations.html` consente di caricare e visualizzare l’output della query oggetto × decorazione. Supporta filtro cronologico, conteggio per decorazione completa / tecnica / ornato, grafico donut, tendenza per US/evidence/sito, matrice tecnica × ornato, matrice decorazione × posizione e correlazione con material class o morphological class quando questi campi sono presenti nel dataset.
+
+Demo inclusa: `data/decorations.geojson`.
+
+## Aggiornamento v10
+
+- La pagina `decorations.html` usa ora un unico box grafico con pulsanti switchabili, coerente con la dashboard principale.
+- I grafici della dashboard principale, del catalogo e della sezione decorations hanno pulsanti di download per:
+  - PNG del grafico attivo;
+  - CSV dei dati filtrati/usati per la visualizzazione;
+  - GeoJSON degli stessi dati;
+  - ZIP con PNG + CSV + GeoJSON + metadati.
+- Gli export rispettano i filtri correnti dell’utente, inclusi dataset, raggruppamento, filtro cronologico, modalità strict per i range e categorie attive.

@@ -85,7 +85,8 @@ function cacheEls() {
     'datasetSelect', 'groupBySelect', 'topGroups', 'valueMode', 'chronoFilterSelect', 'chronoStrictToggle', 'mapGroupSelect', 'mapMetricSelect', 'mapDisplaySelect', 'mapPickDepth', 'mapInfoPanel',
     'categorySearch', 'selectAllCategories', 'excludeZeroCategories', 'categoryLegend',
     'chartTitle', 'chartDescription', 'chartHowTo', 'chartModeSwitcher',
-    'customTileUrl', 'addCustomTileBtn', 'mapLog', 'mapLogCounter', 'mapLogBody', 'mapLegend'
+    'customTileUrl', 'addCustomTileBtn', 'mapLog', 'mapLogCounter', 'mapLogBody', 'mapLegend',
+    'downloadChartPng', 'downloadChartCsv', 'downloadChartGeojson', 'downloadChartZip'
   ].forEach(id => { els[id] = document.getElementById(id); });
 }
 
@@ -138,6 +139,10 @@ function bindEvents() {
   });
 
   els.addCustomTileBtn.addEventListener('click', addCustomTileLayer);
+  if (els.downloadChartPng) els.downloadChartPng.addEventListener('click', () => downloadMainExport('png'));
+  if (els.downloadChartCsv) els.downloadChartCsv.addEventListener('click', () => downloadMainExport('csv'));
+  if (els.downloadChartGeojson) els.downloadChartGeojson.addEventListener('click', () => downloadMainExport('geojson'));
+  if (els.downloadChartZip) els.downloadChartZip.addEventListener('click', () => downloadMainExport('zip'));
 
   els.chartModeSwitcher.querySelectorAll('[data-chart-mode]').forEach(btn => {
     btn.addEventListener('click', () => {
@@ -1272,6 +1277,176 @@ function downloadActiveDataset() {
   a.click();
   a.remove();
   URL.revokeObjectURL(url);
+}
+
+
+async function downloadMainExport(format) {
+  const pack = buildMainExportPackage();
+  if (!pack) return notify('Nessun dato esportabile con i filtri correnti.', 'error');
+  const base = makeSafeFilename(`dashboard_${pack.type}_${pack.chartMode}_${pack.groupBy}_${pack.chronoLabel}`);
+  if (format === 'png') {
+    const blob = await chartToPngBlob('mainChart', pack.title);
+    if (blob) downloadBlob(blob, `${base}.png`);
+    return;
+  }
+  if (format === 'csv') {
+    downloadBlob(new Blob([toCsv(pack.rows)], { type: 'text/csv;charset=utf-8' }), `${base}.csv`);
+    return;
+  }
+  if (format === 'geojson') {
+    downloadBlob(new Blob([JSON.stringify(pack.geojson, null, 2)], { type: 'application/geo+json' }), `${base}.geojson`);
+    return;
+  }
+  if (format === 'zip') {
+    if (!window.JSZip) return notify('JSZip non disponibile: impossibile creare lo ZIP.', 'error');
+    const zip = new JSZip();
+    const png = await chartToPngBlob('mainChart', pack.title);
+    if (png) zip.file(`${base}.png`, png);
+    zip.file(`${base}.csv`, toCsv(pack.rows));
+    zip.file(`${base}.geojson`, JSON.stringify(pack.geojson, null, 2));
+    zip.file(`${base}_metadata.json`, JSON.stringify(pack.metadata, null, 2));
+    const blob = await zip.generateAsync({ type: 'blob' });
+    downloadBlob(blob, `${base}.zip`);
+  }
+}
+
+function buildMainExportPackage() {
+  const ds = getActiveDataset();
+  if (!ds) return null;
+  const categories = activeCategories(ds);
+  const records = filteredRecords(ds);
+  const groupBy = els.groupBySelect.value;
+  const topN = clamp(parseInt(els.topGroups.value, 10) || 18, 5, 100);
+  const valueMode = els.valueMode.value;
+  const groups = aggregateRecords(records, groupBy, categories);
+  const chronoLabel = selectedChronologyExportLabel();
+  let rows = [];
+  let geojson = { type: 'FeatureCollection', name: 'dashboard_export', features: [] };
+  let title = `${TYPE_META[ds.type]?.label || ds.type} · ${state.chartMode}`;
+
+  if (state.chartMode === 'donut') {
+    const totals = categoryTotals(records, categories);
+    const total = Object.values(totals).reduce((a,b) => a + b, 0);
+    rows = Object.entries(totals)
+      .filter(([, value]) => value > 0)
+      .sort((a,b) => b[1] - a[1])
+      .map(([cat, value]) => ({ category: cat, label: ds.labels[cat] || cat, count: value, percent: total ? value / total * 100 : 0 }));
+    geojson.features = rows.map(row => ({ type: 'Feature', geometry: null, properties: row }));
+  } else {
+    const selectedGroups = groups.slice().sort((a,b) => b.total - a.total).slice(0, topN);
+    rows = selectedGroups.map(group => groupExportRow(group, ds, categories, valueMode));
+    geojson.features = selectedGroups.map(group => ({
+      type: 'Feature',
+      geometry: representativeGeometry(group, groupBy),
+      properties: groupExportRow(group, ds, categories, valueMode),
+    }));
+  }
+
+  return {
+    type: ds.type,
+    chartMode: state.chartMode,
+    groupBy,
+    chronoLabel,
+    title,
+    rows,
+    geojson,
+    metadata: {
+      exported_at: new Date().toISOString(),
+      dataset: ds.type,
+      source: ds.sourceName,
+      chart_mode: state.chartMode,
+      group_by: groupBy,
+      value_mode: valueMode,
+      chronology_filter: chronoLabel,
+      active_categories: categories,
+      records_after_filters: records.length,
+      note: 'CSV e GeoJSON sono generati dai dati filtrati usati dal grafico attivo.'
+    }
+  };
+}
+
+function groupExportRow(group, ds, categories, valueMode = 'count') {
+  const row = {
+    group_key: group.key,
+    group_label: group.label,
+    total: group.total,
+    n_records: group.records.length,
+    us_list: uniqueJoin(group.records.map(usDisplayName)),
+    evidence_list: uniqueJoin(group.records.map(r => r.evidence_id_old_str || r.id_evd || 'evidence ND')),
+    site_list: uniqueJoin(group.records.map(siteDisplayName)),
+    evidence_type_list: uniqueJoin(group.records.map(r => r.evidence_type || 'evidence_type ND')),
+    chronology_list: uniqueJoin(group.records.map(r => r.chrono_gen).filter(Boolean)),
+  };
+  categories.forEach(cat => {
+    const count = group.counts[cat] || 0;
+    row[cat] = valueMode === 'share' ? (group.total ? count / group.total * 100 : 0) : count;
+    row[`${cat}_count`] = count;
+    row[`${cat}_percent`] = group.total ? count / group.total * 100 : 0;
+  });
+  return row;
+}
+
+function representativeGeometry(group, groupBy) {
+  const list = groupBy === 'site' ? group.siteGeometries : groupBy === 'evidence' ? group.evidenceGeometries : group.geometries;
+  return dedupeGeometries(list)[0] || null;
+}
+
+function selectedChronologyExportLabel() {
+  const mode = selectedChronologySpecialMode();
+  if (mode === '__records__') return 'tutti_record';
+  if (mode === '__all__') return 'tutte_cronologie';
+  const selected = selectedChronologies();
+  return selected.length ? `chrono_${selected.join('_')}${els.chronoStrictToggle?.checked ? '_strict' : ''}` : 'chrono_none';
+}
+
+async function chartToPngBlob(canvasId, title = '') {
+  const canvas = document.getElementById(canvasId);
+  if (!canvas) return null;
+  const scale = 2;
+  const out = document.createElement('canvas');
+  out.width = Math.max(1, canvas.width * scale);
+  out.height = Math.max(1, canvas.height * scale);
+  const ctx = out.getContext('2d');
+  ctx.fillStyle = '#ffffff';
+  ctx.fillRect(0, 0, out.width, out.height);
+  ctx.drawImage(canvas, 0, 0, out.width, out.height);
+  return new Promise(resolve => out.toBlob(resolve, 'image/png', 1));
+}
+
+function downloadBlob(blob, filename) {
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
+}
+
+function toCsv(rows) {
+  if (!rows || !rows.length) return '';
+  const cols = [];
+  rows.forEach(row => Object.keys(row).forEach(key => { if (!cols.includes(key)) cols.push(key); }));
+  const escape = value => {
+    if (value === null || value === undefined) return '';
+    const s = typeof value === 'object' ? JSON.stringify(value) : String(value);
+    return /[",\n;]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+  };
+  return [cols.join(','), ...rows.map(row => cols.map(col => escape(row[col])).join(','))].join('\n');
+}
+
+function uniqueJoin(values, sep = '; ') {
+  return [...new Set(values.map(valueOrBlank).filter(Boolean))].join(sep);
+}
+
+function makeSafeFilename(value) {
+  return String(value || 'export')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-zA-Z0-9._-]+/g, '_')
+    .replace(/^_+|_+$/g, '')
+    .slice(0, 150) || 'export';
 }
 
 function fetchJson(url) {

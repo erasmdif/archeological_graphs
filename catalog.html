@@ -20,6 +20,12 @@
           <a class="btn ghost" href="index.html"><i class="bi bi-arrow-left"></i> Dashboard</a>
           <a class="btn ghost" href="decorations.html"><i class="bi bi-brush"></i> Decorations</a>
           <div class="catalog-mode-switch"><button class="btn ghost catalog-mode-btn active" data-catalog-mode="single"><i class="bi bi-layout-sidebar"></i> Singolo</button><button class="btn ghost catalog-mode-btn" data-catalog-mode="compare"><i class="bi bi-columns-gap"></i> Confronto</button></div><button id="loadCatalogDemo" class="btn primary"><i class="bi bi-stars"></i> Carica demo</button>
+          <div class="download-actions catalog-download-actions" aria-label="Download catalogo">
+            <button id="downloadCatalogPng" class="btn tiny ghost" title="Scarica grafico principale PNG"><i class="bi bi-file-earmark-image"></i></button>
+            <button id="downloadCatalogCsv" class="btn tiny ghost" title="Scarica dati CSV"><i class="bi bi-filetype-csv"></i></button>
+            <button id="downloadCatalogGeojson" class="btn tiny ghost" title="Scarica dati GeoJSON"><i class="bi bi-braces"></i></button>
+            <button id="downloadCatalogZip" class="btn tiny primary" title="Scarica ZIP completo"><i class="bi bi-download"></i></button>
+          </div>
         </div>
       </div>
 
@@ -186,6 +192,7 @@
 
   <script src="https://cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
   <script src="assets/js/catalog.js"></script>
 </body>
 </html>

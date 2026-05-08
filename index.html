@@ -152,11 +152,19 @@
           <h2>Grafici</h2>
           <p>Un’unica area grafica con cambio rapido della visualizzazione.</p>
         </div>
-        <div class="chart-switcher" id="chartModeSwitcher">
-          <button class="chart-mode-btn active" data-chart-mode="donut" title="Donut"><i class="bi bi-pie-chart"></i></button>
-          <button class="chart-mode-btn" data-chart-mode="bar" title="Barre"><i class="bi bi-bar-chart"></i></button>
-          <button class="chart-mode-btn" data-chart-mode="scatter" title="Dispersione"><i class="bi bi-bounding-box-circles"></i></button>
-          <button class="chart-mode-btn" data-chart-mode="trend" title="Tendenza"><i class="bi bi-graph-up-arrow"></i></button>
+        <div class="chart-head-actions">
+          <div class="chart-switcher" id="chartModeSwitcher">
+            <button class="chart-mode-btn active" data-chart-mode="donut" title="Donut"><i class="bi bi-pie-chart"></i></button>
+            <button class="chart-mode-btn" data-chart-mode="bar" title="Barre"><i class="bi bi-bar-chart"></i></button>
+            <button class="chart-mode-btn" data-chart-mode="scatter" title="Dispersione"><i class="bi bi-bounding-box-circles"></i></button>
+            <button class="chart-mode-btn" data-chart-mode="trend" title="Tendenza"><i class="bi bi-graph-up-arrow"></i></button>
+          </div>
+          <div class="download-actions" aria-label="Download grafico e dati">
+            <button id="downloadChartPng" class="btn tiny ghost" title="Scarica grafico PNG"><i class="bi bi-file-earmark-image"></i></button>
+            <button id="downloadChartCsv" class="btn tiny ghost" title="Scarica dati CSV"><i class="bi bi-filetype-csv"></i></button>
+            <button id="downloadChartGeojson" class="btn tiny ghost" title="Scarica dati GeoJSON"><i class="bi bi-braces"></i></button>
+            <button id="downloadChartZip" class="btn tiny primary" title="Scarica ZIP completo"><i class="bi bi-download"></i></button>
+          </div>
         </div>
       </div>
 
@@ -274,6 +282,7 @@
 
   <script src="https://cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
   <script src="assets/js/app.js"></script>
 </body>

@@ -28,7 +28,7 @@ window.addEventListener('DOMContentLoaded', () => {
     'catalogTopCategories', 'catalogTopChildren', 'catalogNarrative',
     'kpiTotal', 'kpiDiversity', 'kpiDominant', 'kpiCoherence', 'catalogTableBody',
     'catalogCompareSection', 'catalogSingleTop', 'catalogSingleCharts', 'catalogSingleTable',
-    'compareSummaryA', 'compareSummaryB'
+    'compareSummaryA', 'compareSummaryB', 'downloadCatalogPng', 'downloadCatalogCsv', 'downloadCatalogGeojson', 'downloadCatalogZip'
   ].forEach(id => { els[id] = document.getElementById(id); });
 
   initChartDefaults();
@@ -55,6 +55,10 @@ function bindEvents() {
     });
   });
   ['catalogItem', 'catalogItemA', 'catalogItemB'].forEach(id => els[id].addEventListener('change', renderCatalog));
+  if (els.downloadCatalogPng) els.downloadCatalogPng.addEventListener('click', () => downloadCatalogExport('png'));
+  if (els.downloadCatalogCsv) els.downloadCatalogCsv.addEventListener('click', () => downloadCatalogExport('csv'));
+  if (els.downloadCatalogGeojson) els.downloadCatalogGeojson.addEventListener('click', () => downloadCatalogExport('geojson'));
+  if (els.downloadCatalogZip) els.downloadCatalogZip.addEventListener('click', () => downloadCatalogExport('zip'));
 }
 
 function updateModeVisibility() {
@@ -430,6 +434,103 @@ function resetChart(id, type, data, options) { const canvas = document.getElemen
 function baseOptions() { return { responsive: true, maintainAspectRatio: false, animation: { duration: 600, easing: 'easeOutQuart' }, plugins: { legend: { display: false } } }; }
 function palette(n, hueStart = 180) { return Array.from({ length: Math.max(n, 1) }, (_, i) => { const hue = (hueStart + i * 31) % 360; return `hsla(${hue}, 88%, 68%, 0.9)`; }); }
 function getDataset() { return catalogState.datasets[catalogState.activeType]; }
+
+async function downloadCatalogExport(format) {
+  const pack = buildCatalogExportPackage();
+  if (!pack) return alert('Nessun dato esportabile.');
+  const base = makeSafeFilename(`catalog_${pack.dataset}_${pack.mode}_${pack.level}_${pack.selectedLabel}`);
+  if (format === 'png') {
+    const blob = await chartToPngBlob(pack.canvasId);
+    if (blob) downloadBlob(blob, `${base}.png`);
+    return;
+  }
+  if (format === 'csv') {
+    downloadBlob(new Blob([toCsv(pack.rows)], { type: 'text/csv;charset=utf-8' }), `${base}.csv`);
+    return;
+  }
+  if (format === 'geojson') {
+    downloadBlob(new Blob([JSON.stringify(pack.geojson, null, 2)], { type: 'application/geo+json' }), `${base}.geojson`);
+    return;
+  }
+  if (format === 'zip') {
+    if (!window.JSZip) return alert('JSZip non disponibile: impossibile creare lo ZIP.');
+    const zip = new JSZip();
+    const png = await chartToPngBlob(pack.canvasId);
+    if (png) zip.file(`${base}.png`, png);
+    zip.file(`${base}.csv`, toCsv(pack.rows));
+    zip.file(`${base}.geojson`, JSON.stringify(pack.geojson, null, 2));
+    zip.file(`${base}_metadata.json`, JSON.stringify(pack.metadata, null, 2));
+    const blob = await zip.generateAsync({ type: 'blob' });
+    downloadBlob(blob, `${base}.zip`);
+  }
+}
+
+function buildCatalogExportPackage() {
+  const ds = getDataset();
+  if (!ds) return null;
+  const level = els.catalogLevel.value;
+  const allGroups = aggregate(filteredRecords(ds), level, ds.categories).sort((a, b) => b.total - a.total);
+  const selectedKey = catalogState.mode === 'compare' ? els.catalogItemA.value : els.catalogItem.value;
+  const selected = allGroups.find(g => g.key === selectedKey) || allGroups[0];
+  if (!selected) return null;
+  const breakdown = resolveBreakdown(level, els.catalogBreakdown.value);
+  const children = aggregate(selected.records, breakdown, ds.categories).filter(g => g.total > 0).sort((a,b) => b.total - a.total);
+  const rows = children.map(group => {
+    const dom = dominant(group, ds);
+    const row = {
+      unit_key: group.key,
+      unit_label: group.label,
+      total: group.total,
+      diversity: ds.categories.filter(cat => (group.counts[cat] || 0) > 0).length,
+      dominant_class: dom.label,
+      dominant_share: dom.share * 100,
+      us_list: uniqueJoin(group.records.map(usDisplayName)),
+      evidence_list: uniqueJoin(group.records.map(r => r.evidence_id_old_str || r.id_evd || 'evidence ND')),
+      site_list: uniqueJoin(group.records.map(siteDisplayName)),
+      chronology_list: uniqueJoin(group.records.map(r => r.chrono_gen).filter(Boolean)),
+    };
+    ds.categories.forEach(cat => { row[cat] = group.counts[cat] || 0; row[`${cat}_percent`] = group.total ? (group.counts[cat] || 0) / group.total * 100 : 0; });
+    return row;
+  });
+  const geojson = { type: 'FeatureCollection', name: 'catalog_export', features: children.map(group => ({ type: 'Feature', geometry: null, properties: rows[children.indexOf(group)] })) };
+  return {
+    dataset: ds.type,
+    mode: catalogState.mode,
+    level,
+    selectedLabel: selected.label,
+    canvasId: catalogState.mode === 'compare' ? 'compareDonutA' : 'catalogDonut',
+    rows,
+    geojson,
+    metadata: { exported_at: new Date().toISOString(), dataset: ds.type, level, selected: selected.label, mode: catalogState.mode, breakdown, chronology_filter: catalogChronologyExportLabel(), records_after_filters: selected.records.length }
+  };
+}
+
+function catalogChronologyExportLabel() {
+  const mode = selectedChronologySpecialMode();
+  if (mode === '__records__') return 'tutti_record';
+  if (mode === '__all__') return 'tutte_cronologie';
+  const selected = selectedChronologies();
+  return selected.length ? `chrono_${selected.join('_')}${els.catalogChronoStrict?.checked ? '_strict' : ''}` : 'chrono_none';
+}
+
+async function chartToPngBlob(canvasId) {
+  const canvas = document.getElementById(canvasId);
+  if (!canvas) return null;
+  const scale = 2;
+  const out = document.createElement('canvas');
+  out.width = Math.max(1, canvas.width * scale);
+  out.height = Math.max(1, canvas.height * scale);
+  const ctx = out.getContext('2d');
+  ctx.fillStyle = '#ffffff';
+  ctx.fillRect(0, 0, out.width, out.height);
+  ctx.drawImage(canvas, 0, 0, out.width, out.height);
+  return new Promise(resolve => out.toBlob(resolve, 'image/png', 1));
+}
+function downloadBlob(blob, filename) { const url = URL.createObjectURL(blob); const a = document.createElement('a'); a.href = url; a.download = filename; document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(url); }
+function toCsv(rows) { if (!rows || !rows.length) return ''; const cols=[]; rows.forEach(r=>Object.keys(r).forEach(k=>{if(!cols.includes(k)) cols.push(k)})); const esc=v=>{ if(v===null||v===undefined) return ''; const s=typeof v==='object'?JSON.stringify(v):String(v); return /[",\n;]/.test(s)?`"${s.replace(/"/g,'""')}"`:s;}; return [cols.join(','), ...rows.map(r=>cols.map(c=>esc(r[c])).join(','))].join('\n'); }
+function uniqueJoin(values, sep='; ') { return [...new Set(values.map(valueOrBlank).filter(Boolean))].join(sep); }
+function makeSafeFilename(value) { return String(value||'export').normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-zA-Z0-9._-]+/g,'_').replace(/^_+|_+$/g,'').slice(0,150)||'export'; }
+
 function fetchJson(url) { return fetch(url).then(response => { if (!response.ok) throw new Error(`HTTP ${response.status}`); return response.json(); }); }
 function parseFile(file) { const ext = file.name.split('.').pop().toLowerCase(); return new Promise((resolve, reject) => { const reader = new FileReader(); reader.onerror = () => reject(reader.error); reader.onload = () => { try { const text = reader.result; if (ext === 'csv') resolve(Papa.parse(text, { header: true, dynamicTyping: false, skipEmptyLines: true }).data); else resolve(JSON.parse(text)); } catch (error) { reject(error); } }; reader.readAsText(file); }); }
 function labelFromCategory(cat) { return cat.replace(/^n_/, '').replace(/_/g, ' ').replace(/\b\w/g, s => s.toUpperCase()); }

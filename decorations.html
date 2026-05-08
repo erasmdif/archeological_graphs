@@ -92,58 +92,60 @@
       </div>
     </section>
 
-    <section class="decorations-dashboard-grid">
-      <article class="panel decorations-chart-card">
-        <div class="section-heading compact">
-          <div>
-            <h2>A. Distribuzione percentuale</h2>
-            <p id="decorDonutDescription">Carica i dati per visualizzare le percentuali d’importanza.</p>
-          </div>
-        </div>
-        <div class="decor-chart-wrap"><canvas id="decorDonutChart"></canvas></div>
-      </article>
-
-      <article class="panel decorations-chart-card">
-        <div class="section-heading compact">
-          <div>
-            <h2>B. Tendenza per contesto</h2>
-            <p id="decorTrendDescription">Mostra quali decorazioni sono più usate in US, evidence o siti.</p>
-          </div>
-        </div>
-        <div class="decor-chart-wrap"><canvas id="decorTrendChart"></canvas></div>
-      </article>
-    </section>
-
-    <section class="decorations-dashboard-grid decorations-matrix-grid">
-      <article class="panel decorations-chart-card">
-        <div class="section-heading compact">
-          <div>
-            <h2>C. dec_tecn_type × dec_ornt</h2>
-            <p id="decorTechOrnDescription">Correlazione tra tecnica decorativa e ornato.</p>
-          </div>
-        </div>
-        <div class="decor-chart-wrap"><canvas id="decorTechOrnChart"></canvas></div>
-      </article>
-
-      <article class="panel decorations-chart-card">
-        <div class="section-heading compact">
-          <div>
-            <h2>D. decoration × position</h2>
-            <p id="decorPositionDescription">Relazione tra decorazione completa e posizione sull’oggetto.</p>
-          </div>
-        </div>
-        <div class="decor-chart-wrap"><canvas id="decorPositionChart"></canvas></div>
-      </article>
-    </section>
-
-    <section class="panel decorations-chart-card decorations-wide-chart">
-      <div class="section-heading compact">
+    <section class="panel chart-panel decorations-switch-panel">
+      <div class="chart-panel-head">
         <div>
-          <h2>E. Decoration × material/morphological class</h2>
-          <p id="decorRelatedDescription">Correlazione tra la voce decorativa selezionata e materiale o morfologia. Se il dataset non contiene questi campi, il grafico lo segnala.</p>
+          <h2>Grafici decorations</h2>
+          <p>Un’unica area grafica con cambio rapido della visualizzazione, mantenendo i filtri cronologici e il tipo di conteggio scelto.</p>
+        </div>
+        <div class="chart-head-actions">
+          <div class="chart-switcher" id="decorChartModeSwitcher">
+            <button class="chart-mode-btn active" data-decor-chart-mode="donut" title="Donut"><i class="bi bi-pie-chart"></i></button>
+            <button class="chart-mode-btn" data-decor-chart-mode="trend" title="Tendenza"><i class="bi bi-graph-up-arrow"></i></button>
+            <button class="chart-mode-btn" data-decor-chart-mode="techorn" title="Tecnica × ornato"><i class="bi bi-grid-3x3-gap"></i></button>
+            <button class="chart-mode-btn" data-decor-chart-mode="position" title="Decorazione × posizione"><i class="bi bi-pin-map"></i></button>
+            <button class="chart-mode-btn" data-decor-chart-mode="related" title="Decorazione × materiale/morfologia"><i class="bi bi-diagram-3"></i></button>
+          </div>
+          <div class="download-actions" aria-label="Download grafico e dati decorations">
+            <button id="downloadDecorPng" class="btn tiny ghost" title="Scarica grafico PNG"><i class="bi bi-file-earmark-image"></i></button>
+            <button id="downloadDecorCsv" class="btn tiny ghost" title="Scarica dati CSV"><i class="bi bi-filetype-csv"></i></button>
+            <button id="downloadDecorGeojson" class="btn tiny ghost" title="Scarica dati GeoJSON"><i class="bi bi-braces"></i></button>
+            <button id="downloadDecorZip" class="btn tiny primary" title="Scarica ZIP completo"><i class="bi bi-download"></i></button>
+          </div>
         </div>
       </div>
-      <div class="decor-chart-wrap decor-chart-wide"><canvas id="decorRelatedChart"></canvas></div>
+
+      <div class="decor-single-chart-layout">
+        <aside class="chart-side explain-side">
+          <div class="mini-panel">
+            <span class="mini-label">Descrizione</span>
+            <h3 id="decorActiveTitle">Distribuzione percentuale</h3>
+            <p id="decorActiveDescription">Carica i dati per visualizzare le percentuali d’importanza.</p>
+          </div>
+          <div class="mini-panel soft-info">
+            <span class="mini-label">Download</span>
+            <p>Il pulsante ZIP scarica grafico PNG, tabella CSV e GeoJSON dei dati filtrati/usati per il grafico attivo.</p>
+          </div>
+        </aside>
+
+        <div class="decor-chart-switch-wrap">
+          <div class="decor-chart-pane active" data-decor-pane="donut">
+            <canvas id="decorDonutChart"></canvas>
+          </div>
+          <div class="decor-chart-pane" data-decor-pane="trend">
+            <canvas id="decorTrendChart"></canvas>
+          </div>
+          <div class="decor-chart-pane" data-decor-pane="techorn">
+            <canvas id="decorTechOrnChart"></canvas>
+          </div>
+          <div class="decor-chart-pane" data-decor-pane="position">
+            <canvas id="decorPositionChart"></canvas>
+          </div>
+          <div class="decor-chart-pane" data-decor-pane="related">
+            <canvas id="decorRelatedChart"></canvas>
+          </div>
+        </div>
+      </div>
     </section>
 
     <section class="panel decorations-summary-panel">
@@ -160,6 +162,7 @@
 
   <script src="https://cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
   <script src="assets/js/decorations.js"></script>
 </body>
 </html>

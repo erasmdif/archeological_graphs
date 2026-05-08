@@ -864,3 +864,68 @@ select[multiple] option {
   .decorations-controls { grid-template-columns: 1fr; }
   .decor-chart-wrap, .decor-chart-wide { height: 380px; min-height: 380px; }
 }
+
+/* v10 export controls and switchable decorations chart area */
+.chart-head-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+.download-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px;
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  background: rgba(255,255,255,0.74);
+  box-shadow: var(--shadow-soft);
+}
+.download-actions .btn.tiny.primary {
+  padding: 8px 11px;
+  color: white;
+}
+.decorations-switch-panel .chart-panel-head {
+  margin-bottom: 16px;
+}
+.decor-single-chart-layout {
+  display: grid;
+  grid-template-columns: 280px minmax(0, 1fr);
+  gap: 16px;
+  min-height: 560px;
+}
+.decor-chart-switch-wrap {
+  position: relative;
+  min-height: 560px;
+  background: rgba(255,255,255,0.7);
+  border: 1px solid rgba(255,255,255,0.68);
+  border-radius: 22px;
+  box-shadow: var(--shadow-soft);
+  padding: 18px;
+}
+.decor-chart-pane {
+  display: none;
+  position: absolute;
+  inset: 18px;
+}
+.decor-chart-pane.active {
+  display: block;
+}
+.decor-chart-pane canvas {
+  width: 100% !important;
+  height: 100% !important;
+}
+.catalog-download-actions {
+  margin-left: 0;
+}
+@media (max-width: 1100px) {
+  .decor-single-chart-layout {
+    grid-template-columns: 1fr;
+  }
+  .decor-chart-switch-wrap {
+    min-height: 460px;
+  }
+  .decor-chart-pane { inset: 14px; }
+}
