@@ -1,0 +1,165 @@
+<!doctype html>
+<html lang="it">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Decorations · US Object Dashboard</title>
+  <link rel="preconnect" href="https://cdn.jsdelivr.net" />
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css" />
+  <link rel="stylesheet" href="assets/css/styles.css" />
+</head>
+<body>
+  <main class="catalog-shell decorations-shell">
+    <section class="panel">
+      <div class="catalog-nav">
+        <div>
+          <h1>Decorations</h1>
+          <p>Analisi object × decoration: distribuzione delle decorazioni, tecnica decorativa, ornato, posizione e rapporti con classi di materiale/morfologia.</p>
+        </div>
+        <div class="top-actions">
+          <a class="btn ghost" href="index.html"><i class="bi bi-arrow-left"></i> Dashboard</a>
+          <a class="btn ghost" href="catalog.html"><i class="bi bi-grid-3x3-gap"></i> Catalogo</a>
+          <div class="status-pill" id="decorStatus">Nessun dataset caricato</div>
+        </div>
+      </div>
+
+      <div class="catalog-upload-row decorations-upload-row">
+        <label class="mini-upload">Output decorazioni GeoJSON/JSON/CSV
+          <input type="file" id="decorFile" accept=".geojson,.json,.csv" />
+        </label>
+        <button id="loadDecorFile" class="btn secondary"><i class="bi bi-box-arrow-in-down"></i> Carica file</button>
+        <button id="loadDecorDemo" class="btn primary"><i class="bi bi-stars"></i> Carica demo decorations</button>
+      </div>
+    </section>
+
+    <section class="panel decorations-controls-panel">
+      <div class="section-heading compact">
+        <div>
+          <h2>Filtri e modalità di conteggio</h2>
+          <p>Il conteggio può usare decorazione completa, tecnica o ornato. Il filtro cronologico segue la stessa ratio del resto dell’applicativo.</p>
+        </div>
+      </div>
+      <div class="catalog-controls decorations-controls">
+        <label>
+          Conteggio principale
+          <select id="decorDimension">
+            <option value="decoration">Decorazione completa</option>
+            <option value="technique">dec_tecn_type</option>
+            <option value="ornament">dec_ornt</option>
+          </select>
+        </label>
+        <label>
+          Tendenza raggruppata per
+          <select id="decorTrendGroup">
+            <option value="su">US</option>
+            <option value="evidence">Evidence</option>
+            <option value="site">Sito</option>
+            <option value="evidence_type">Evidence type</option>
+            <option value="chrono">Chronology</option>
+          </select>
+        </label>
+        <label>
+          Decorazione ×
+          <select id="decorRelatedDimension">
+            <option value="material">Material class</option>
+            <option value="morphology">Morphological class</option>
+          </select>
+        </label>
+        <label>
+          Modalità cronologica
+          <select id="decorChronoMode">
+            <option value="all_records">Tutti i record</option>
+            <option value="all_chronologies">Tutte le cronologie valorizzate</option>
+            <option value="selected">Cronologie selezionate</option>
+          </select>
+        </label>
+        <label>
+          Cronologie
+          <select id="decorChronoFilter" multiple size="7"></select>
+        </label>
+        <label class="toggle-control">
+          <span>Escludi range dubbi</span>
+          <input id="decorChronoStrict" type="checkbox" />
+        </label>
+        <label>
+          Top voci
+          <input id="decorTopCategories" type="number" min="3" max="30" value="12" />
+        </label>
+        <label>
+          Top gruppi
+          <input id="decorTopGroups" type="number" min="5" max="100" value="28" />
+        </label>
+      </div>
+    </section>
+
+    <section class="decorations-dashboard-grid">
+      <article class="panel decorations-chart-card">
+        <div class="section-heading compact">
+          <div>
+            <h2>A. Distribuzione percentuale</h2>
+            <p id="decorDonutDescription">Carica i dati per visualizzare le percentuali d’importanza.</p>
+          </div>
+        </div>
+        <div class="decor-chart-wrap"><canvas id="decorDonutChart"></canvas></div>
+      </article>
+
+      <article class="panel decorations-chart-card">
+        <div class="section-heading compact">
+          <div>
+            <h2>B. Tendenza per contesto</h2>
+            <p id="decorTrendDescription">Mostra quali decorazioni sono più usate in US, evidence o siti.</p>
+          </div>
+        </div>
+        <div class="decor-chart-wrap"><canvas id="decorTrendChart"></canvas></div>
+      </article>
+    </section>
+
+    <section class="decorations-dashboard-grid decorations-matrix-grid">
+      <article class="panel decorations-chart-card">
+        <div class="section-heading compact">
+          <div>
+            <h2>C. dec_tecn_type × dec_ornt</h2>
+            <p id="decorTechOrnDescription">Correlazione tra tecnica decorativa e ornato.</p>
+          </div>
+        </div>
+        <div class="decor-chart-wrap"><canvas id="decorTechOrnChart"></canvas></div>
+      </article>
+
+      <article class="panel decorations-chart-card">
+        <div class="section-heading compact">
+          <div>
+            <h2>D. decoration × position</h2>
+            <p id="decorPositionDescription">Relazione tra decorazione completa e posizione sull’oggetto.</p>
+          </div>
+        </div>
+        <div class="decor-chart-wrap"><canvas id="decorPositionChart"></canvas></div>
+      </article>
+    </section>
+
+    <section class="panel decorations-chart-card decorations-wide-chart">
+      <div class="section-heading compact">
+        <div>
+          <h2>E. Decoration × material/morphological class</h2>
+          <p id="decorRelatedDescription">Correlazione tra la voce decorativa selezionata e materiale o morfologia. Se il dataset non contiene questi campi, il grafico lo segnala.</p>
+        </div>
+      </div>
+      <div class="decor-chart-wrap decor-chart-wide"><canvas id="decorRelatedChart"></canvas></div>
+    </section>
+
+    <section class="panel decorations-summary-panel">
+      <div class="section-heading compact">
+        <div>
+          <h2>Riepilogo tabellare</h2>
+          <p>Prime voci ordinate per frequenza nel dataset filtrato.</p>
+        </div>
+        <div class="status-pill" id="decorSummaryStats">0 record</div>
+      </div>
+      <div class="decor-table-wrap" id="decorTableWrap"></div>
+    </section>
+  </main>
+
+  <script src="https://cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
+  <script src="assets/js/decorations.js"></script>
+</body>
+</html>
